@@ -138,7 +138,8 @@ def test_train_writes_metrics_and_a_final_model(tmp_path):
     train_steps = [r["step"] for r in records if "train_loss" in r]
     val_steps = [r["step"] for r in records if "val_loss" in r]
     assert train_steps == [0, 1, 2, 3]
-    assert val_steps == [0, 2, 3]
+    # The final evaluation comes after the last update, at step 4.
+    assert val_steps == [0, 2, 4]
     assert (out / "model.pt").exists()
     assert summary["steps"] == 4
 
@@ -228,3 +229,111 @@ def test_train_forwards_every_metric_record_to_the_tracker(tmp_path):
 
     records = [json.loads(line) for line in (out / "metrics.jsonl").read_text().splitlines()]
     assert len(tracker.logged) == len(records)
+
+
+class CrashingTracker:
+    """Fails once, on the training record of one step, after that record is written."""
+
+    def __init__(self, crash_step):
+        self.crash_step = crash_step
+
+    def log(self, metrics, step):
+        if "train_loss" in metrics and step == self.crash_step:
+            raise RuntimeError("crash")
+
+    def finish(self):
+        pass
+
+
+def test_an_interrupted_run_resumes_from_its_last_checkpoint(tmp_path):
+    root = make_data_root(tmp_path / "data")
+    cfg = TrainConfig(
+        total_tokens=4 * 64,
+        total_batch_size=64,
+        micro_batch_size=2,
+        sequence_length=16,
+        warmup_steps=1,
+        val_every=10,
+        val_batches=1,
+        checkpoint_every=2,
+        use_compile=False,
+    )
+    out = tmp_path / "run"
+
+    with pytest.raises(RuntimeError, match="crash"):
+        train(cfg, ARMS["soft"], TINY, root, out, device="cpu", tracker=CrashingTracker(2))
+    assert (out / "checkpoint.pt").exists()
+
+    summary = train(cfg, ARMS["soft"], TINY, root, out, device="cpu")
+
+    records = [json.loads(line) for line in (out / "metrics.jsonl").read_text().splitlines()]
+    train_steps = [r["step"] for r in records if "train_loss" in r]
+    assert train_steps == [0, 1, 2, 3]
+    assert summary["steps"] == 4
+    assert not (out / "checkpoint.pt").exists()
+
+
+def test_loader_state_lets_a_restored_loader_continue_the_same_stream(tmp_path):
+    make_shard(tmp_path, "train", 0, 200)
+    loader = TokenLoader(tmp_path, "train", batch_size=2, seq_len=8)
+    loader.next_batch()
+    saved = loader.state()
+    expected, _, _ = loader.next_batch()
+
+    restored = TokenLoader(tmp_path, "train", batch_size=2, seq_len=8)
+    restored.restore(saved)
+    actual, _, _ = restored.next_batch()
+
+    assert torch.equal(actual, expected)
+
+
+def test_on_checkpoint_is_called_at_each_publish_step(tmp_path):
+    root = make_data_root(tmp_path / "data")
+    cfg = TrainConfig(
+        total_tokens=4 * 64,
+        total_batch_size=64,
+        micro_batch_size=2,
+        sequence_length=16,
+        warmup_steps=1,
+        val_every=10,
+        val_batches=1,
+        checkpoint_every=1,
+        publish_every=2,
+        use_compile=False,
+    )
+    published = []
+
+    train(
+        cfg,
+        ARMS["uniform"],
+        TINY,
+        root,
+        tmp_path / "run",
+        device="cpu",
+        on_checkpoint=lambda out, step: published.append(step),
+    )
+
+    assert published == [2, 4]
+
+
+def test_resume_refuses_a_checkpoint_from_another_configuration(tmp_path):
+    from dataclasses import replace
+
+    root = make_data_root(tmp_path / "data")
+    cfg = TrainConfig(
+        total_tokens=4 * 64,
+        total_batch_size=64,
+        micro_batch_size=2,
+        sequence_length=16,
+        warmup_steps=1,
+        val_every=10,
+        val_batches=1,
+        checkpoint_every=2,
+        use_compile=False,
+    )
+    out = tmp_path / "run"
+    with pytest.raises(RuntimeError, match="crash"):
+        train(cfg, ARMS["soft"], TINY, root, out, device="cpu", tracker=CrashingTracker(2))
+
+    with pytest.raises(ValueError, match="another run"):
+        train(replace(cfg, max_lr=1e-3), ARMS["soft"], TINY, root, out, device="cpu")

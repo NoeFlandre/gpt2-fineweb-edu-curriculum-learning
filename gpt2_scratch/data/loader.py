@@ -29,6 +29,15 @@ class TokenLoader:
         """Restart from the first token of the first shard."""
         self._open(0)
 
+    def state(self) -> dict:
+        """Where the next batch starts, so a resumed run reads the same data."""
+        return {"shard_index": self.shard_index, "position": self.position}
+
+    def restore(self, state: dict) -> None:
+        """Continue from a position saved by state()."""
+        self._open(state["shard_index"])
+        self.position = state["position"]
+
     def next_batch(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Return inputs, targets and the score of each target token."""
         span = self.batch_size * self.seq_len

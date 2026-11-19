@@ -28,8 +28,13 @@ Each document's score comes from the [FineWeb-Edu classifier](https://huggingfac
 | Learning rate | Peak 6e-4, 10 warmup steps, cosine decay to 6e-5 |
 | Precision | bf16 autocast, `torch.compile` on the training forward |
 | Seed | 42 |
-| Validation | 40 batches of 16 from held-out FineWeb documents, unweighted, every 10 steps |
-| Benchmark | Full HellaSwag validation set (10,042 examples), normalized accuracy |
+| Validation | 40 batches of 16 from held-out FineWeb documents, unweighted, every 10 steps and after the last update |
+| Benchmark | HellaSwag, full validation set (10,042 examples), normalized accuracy, every 10 steps and after the last update |
+| Checkpoints | Every 10 steps locally, and every 50 steps to the model repo (`runs/<arm>/checkpoint.pt`). An interrupted run resumes from its last checkpoint and reads the same data, fetching it from the repo when missing |
+
+The benchmark is a curve, not a single score: each point is the normalized accuracy of the model
+after that many optimizer steps. As in the original repository, an example is scored by the ending
+whose average per-token loss is lowest, under bf16 autocast.
 
 ## Loss normalization
 

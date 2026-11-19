@@ -33,7 +33,14 @@ def plot_runs(runs: Mapping[str, Path], out_dir: Path) -> list[Path]:
     written = [
         _line_plot(metrics, "train_loss", "Training loss", "Loss", out_dir / "training_loss.png"),
         _line_plot(metrics, "val_loss", "Validation loss", "Loss", out_dir / "validation_loss.png"),
-        _bar_plot(metrics, out_dir / "hellaswag.png"),
+        _line_plot(
+            metrics,
+            "hellaswag_acc",
+            "HellaSwag accuracy (normalized)",
+            "Accuracy",
+            out_dir / "hellaswag.png",
+            baseline=GPT2_BASELINE_ACCURACY,
+        ),
     ]
     return written
 
@@ -43,32 +50,23 @@ def _series(records: list[dict], key: str) -> tuple[list[int], list[float]]:
     return [step for step, _ in points], [value for _, value in points]
 
 
-def _line_plot(metrics: dict, key: str, title: str, ylabel: str, path: Path) -> Path:
+def _line_plot(
+    metrics: dict,
+    key: str,
+    title: str,
+    ylabel: str,
+    path: Path,
+    baseline: float | None = None,
+) -> Path:
     figure, axis = plt.subplots(figsize=(10, 5))
     for name, records in metrics.items():
         axis.plot(*_series(records, key), marker="o", label=name)
+    if baseline is not None:
+        axis.axhline(baseline, color="gray", linestyle="--", label="GPT-2 124M")
     axis.set_title(title)
     axis.set_xlabel("Step")
     axis.set_ylabel(ylabel)
     axis.grid(alpha=0.3)
-    axis.legend()
-    figure.savefig(path, dpi=130, bbox_inches="tight")
-    plt.close(figure)
-    return path
-
-
-def _bar_plot(metrics: dict, path: Path) -> Path:
-    names, values = [], []
-    for name, records in metrics.items():
-        final = [r["hellaswag_acc"] for r in records if "hellaswag_acc" in r]
-        if final:
-            names.append(name)
-            values.append(final[-1])
-    figure, axis = plt.subplots(figsize=(8, 5))
-    axis.bar(names, values)
-    axis.axhline(GPT2_BASELINE_ACCURACY, color="gray", linestyle="--", label="GPT-2 124M")
-    axis.set_title("HellaSwag accuracy (normalized)")
-    axis.set_ylabel("Accuracy")
     axis.legend()
     figure.savefig(path, dpi=130, bbox_inches="tight")
     plt.close(figure)

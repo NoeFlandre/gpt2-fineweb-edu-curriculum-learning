@@ -6,6 +6,7 @@ import numpy as np
 import tiktoken
 from gpt2_scratch.data.shards import load_shard
 from gpt2_scratch.data.tokenize import encode_document
+from gpt2_scratch.publishing import MODEL_REPO
 from gpt2_scratch.training.tracking import TRACKIO_BUCKET, TRACKIO_PROJECT, TRACKIO_SPACE
 from scripts import prepare_data, report, train, upload
 
@@ -102,6 +103,9 @@ def test_upload_main_uploads_the_runs_then_publishes_the_dashboard(monkeypatch, 
         def upload_folder(self, **kwargs):
             uploads.append(kwargs)
 
+        def upload_file(self, **kwargs):
+            uploads.append(kwargs)
+
     monkeypatch.setattr(upload, "HfApi", FakeApi)
     monkeypatch.setattr(
         upload,
@@ -115,7 +119,7 @@ def test_upload_main_uploads_the_runs_then_publishes_the_dashboard(monkeypatch, 
     upload.main()
 
     assert uploads[0]["path_in_repo"] == "runs"
-    assert uploads[0]["repo_id"] == upload.REPO
+    assert uploads[0]["repo_id"] == MODEL_REPO
     assert published == [(TRACKIO_PROJECT, TRACKIO_SPACE, TRACKIO_BUCKET)]
 
 
@@ -140,7 +144,10 @@ def test_train_main_wires_the_arm_and_tracker_into_the_runner(monkeypatch):
         def finish(self):
             captured["finished"] = True
 
-    def fake_train(cfg, arm, model_config, data, out, device, hellaswag, encode, tracker):
+    def fake_train(
+        cfg, arm, model_config, data, out, device, hellaswag, encode, tracker, on_checkpoint
+    ):
+        assert on_checkpoint is None
         captured.update(arm=arm.name, out=out, examples=len(hellaswag), device=device)
         assert isinstance(tracker, FakeTracker)
         return {"steps": 0}
@@ -149,7 +156,9 @@ def test_train_main_wires_the_arm_and_tracker_into_the_runner(monkeypatch):
     monkeypatch.setattr(train, "train", fake_train)
     monkeypatch.setattr(train, "load_examples", lambda path: [{"label": 0}] * 3)
     monkeypatch.setattr(
-        sys, "argv", ["train", "--arm", "hard", "--out", "runs/hard", "--device", "cpu"]
+        sys,
+        "argv",
+        ["train", "--arm", "hard", "--out", "runs/hard", "--device", "cpu", "--no-hub"],
     )
 
     train.main()

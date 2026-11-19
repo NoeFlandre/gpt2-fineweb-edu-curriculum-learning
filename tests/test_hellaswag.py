@@ -47,24 +47,21 @@ def test_load_examples_reads_one_json_object_per_line(tmp_path):
     assert [item["label"] for item in loaded] == [0, 3]
 
 
-def test_accuracy_counts_the_correct_predictions():
-    examples = [example(2), example(3)]
-    boosted = []
-    for item in examples:
-        tokens, _, _ = hellaswag.render_example(item, encode_bytes)
-        logits = torch.zeros(4, tokens.shape[1], 256)
-        for position in range(tokens.shape[1] - 1):
-            logits[item["label"], position, tokens[item["label"], position + 1]] = 10.0
-        boosted.append(logits)
+class FirstEndingModel:
+    """Expects the first ending of every example, whatever the example says."""
 
-    class ReplayModel:
-        def __init__(self, outputs):
-            self.outputs = list(outputs)
+    def __call__(self, tokens):
+        logits = torch.zeros(tokens.size(0), tokens.size(1), 256)
+        for row in range(0, tokens.size(0), 4):
+            for position in range(tokens.size(1) - 1):
+                logits[row, position, tokens[row, position + 1]] = 10.0
+        return logits, None
 
-        def __call__(self, tokens):
-            return self.outputs.pop(0), None
 
-    model = ReplayModel([boosted[0], torch.zeros_like(boosted[1])])
-    accuracy = hellaswag.accuracy(model, examples, "cpu", encode_bytes)
+def test_accuracy_counts_the_examples_whose_first_ending_is_correct_across_batches():
+    # Ten examples need two batches, so the batching is exercised too.
+    examples = [example(label) for label in [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]]
+
+    accuracy = hellaswag.accuracy(FirstEndingModel(), examples, "cpu", encode_bytes)
 
     assert accuracy == 0.5

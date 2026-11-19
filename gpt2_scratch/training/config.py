@@ -21,6 +21,9 @@ class TrainConfig:
     grad_clip: float = 1.0
     val_every: int = 10
     val_batches: int = 40
+    hellaswag_every: int = 10
+    checkpoint_every: int = 10
+    publish_every: int = 50
     seed: int = 42
     use_compile: bool = True
 

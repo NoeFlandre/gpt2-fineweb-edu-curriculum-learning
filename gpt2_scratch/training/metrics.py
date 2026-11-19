@@ -15,14 +15,25 @@ class Tracker(Protocol):
         """Close the run."""
 
 
-class MetricsLog:
-    """Writes metric records to a JSON Lines file, starting from an empty file."""
+def _kept_lines(path: Path, keep_before: int) -> str:
+    """Records of an earlier run that come before the step a resumed run starts from."""
+    if keep_before <= 0 or not path.exists():
+        return ""
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    return "".join(json.dumps(line) + "\n" for line in lines if line["step"] < keep_before)
 
-    def __init__(self, path: Path, tracker: Tracker | None = None) -> None:
-        """Create or empty the file at path; records are also sent to tracker if given."""
+
+class MetricsLog:
+    """Writes metric records to a JSON Lines file."""
+
+    def __init__(self, path: Path, tracker: Tracker | None = None, keep_before: int = 0) -> None:
+        """Start the file afresh, keeping only records of steps before keep_before.
+
+        Records are also sent to tracker if given.
+        """
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text("")
+        self.path.write_text(_kept_lines(self.path, keep_before))
         self.tracker = tracker
 
     def write(self, **fields) -> None:
