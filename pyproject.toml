@@ -13,5 +13,51 @@ dependencies = [
     "tiktoken>=0.14.0",
     "torch>=2.14.1",
     "tqdm>=4.70.1",
+    "trackio==0.45.1",
     "transformers>=5.20.1",
 ]
+
+[dependency-groups]
+dev = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.8.1",
+    "mutmut>=3.8.1",
+    "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
+    "radon>=6.0.1",
+    "ruff>=0.17.5",
+    "ty>=0.0.107",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["gpt2_scratch", "scripts"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = ["if __name__ == .__main__.:"]
+
+[tool.ruff]
+line-length = 100
+src = ["gpt2_scratch", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "N", "D"]
+ignore = ["D100", "D104", "D107", "N812"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.mutmut]
+paths_to_mutate = ["gpt2_scratch/"]
+tests_dir = ["tests/"]
+# Figure titles, labels and layout are cosmetic; they are covered by smoke tests only.
+do_not_mutate = ["gpt2_scratch/reporting/*"]
+also_copy = ["scripts/"]

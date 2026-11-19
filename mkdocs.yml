@@ -1,0 +1,16 @@
+site_name: GPT-2 from scratch on FineWeb-Edu
+site_description: Soft quality weighting versus hard filtering for GPT-2 pretraining.
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+nav:
+  - Overview: index.md
+  - Experiment: experiment.md
+  - Usage: usage.md
+  - Architecture: architecture.md
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - tables

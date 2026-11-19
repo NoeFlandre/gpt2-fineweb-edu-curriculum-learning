@@ -173,3 +173,15 @@ cython_debug/
 # Specific model files
 logs/*.pt
 .DS_Store
+
+# FineWeb-Edu token shards (local only, ~20 GB)
+data/fineweb_edu/
+
+# Experiment outputs (regenerated locally, uploaded to Hugging Face)
+data/arms/
+runs/
+mutants/
+htmlcov/
+.coverage
+.mutmut-cache
+site/
