@@ -44,8 +44,14 @@ def fetch_checkpoint(repo: str, arm: str, out_dir: Path) -> bool:
             repo, remote_path(arm, CHECKPOINT), repo_type="model", local_dir=out_dir
         )
     except EntryNotFoundError:
+        _discard_download(out_dir)
         return False
     Path(downloaded).replace(target)
+    _discard_download(out_dir)
+    return True
+
+
+def _discard_download(out_dir: Path) -> None:
+    """Remove the folders that a download into out_dir leaves behind."""
     shutil.rmtree(out_dir / "runs", ignore_errors=True)
     shutil.rmtree(out_dir / ".cache", ignore_errors=True)
-    return True

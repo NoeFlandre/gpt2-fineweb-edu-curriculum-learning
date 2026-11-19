@@ -68,3 +68,18 @@ def test_fetch_checkpoint_keeps_a_local_checkpoint_without_downloading(monkeypat
     monkeypatch.setattr(publishing, "hf_hub_download", forbidden)
 
     assert publishing.fetch_checkpoint("user/repo", "uniform", tmp_path) is True
+
+
+def test_fetch_checkpoint_leaves_no_download_folders_when_the_hub_has_none(monkeypatch, tmp_path):
+    out = tmp_path / "uniform"
+
+    def missing(repo, filename, repo_type, local_dir):
+        (Path(local_dir) / "runs" / "uniform").mkdir(parents=True)
+        (Path(local_dir) / ".cache").mkdir()
+        raise EntryNotFoundError("no checkpoint")
+
+    monkeypatch.setattr(publishing, "hf_hub_download", missing)
+
+    assert publishing.fetch_checkpoint("user/repo", "uniform", out) is False
+    assert not (out / "runs").exists()
+    assert not (out / ".cache").exists()
