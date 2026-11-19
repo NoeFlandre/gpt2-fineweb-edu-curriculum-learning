@@ -23,7 +23,7 @@ Each document's score comes from the [FineWeb-Edu classifier](https://huggingfac
 | Setting | Value |
 |---|---|
 | Tokens per arm | 100M (190 optimizer steps of 524,288 tokens) |
-| Micro-batch x sequence | 16 x 1024, with 32 accumulation steps |
+| Micro-batch x sequence | 8 x 1024, with 64 accumulation steps (16 x 1024 runs out of memory on this GPU) |
 | Optimizer | AdamW, betas (0.9, 0.95), weight decay 0.1 on matrices |
 | Learning rate | Peak 6e-4, 10 warmup steps, cosine decay to 6e-5 |
 | Precision | bf16 autocast, `torch.compile` on the training forward |

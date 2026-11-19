@@ -43,11 +43,10 @@ def _pad(rows: list[list[int]]) -> torch.Tensor:
     return padded
 
 
-def _render_batch(
-    examples: Sequence[dict], encode: Encode
+def _stack(
+    rendered: Sequence[tuple[torch.Tensor, torch.Tensor, int]],
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Stack rendered examples into (N, 4, width) tokens and masks, and (N,) labels."""
-    rendered = [render_example(example, encode) for example in examples]
     width = max(tokens.size(1) for tokens, _, _ in rendered)
     tokens = torch.zeros(len(rendered), CHOICES, width, dtype=torch.long)
     masks = torch.zeros_like(tokens)
@@ -88,10 +87,18 @@ def predict(logits: torch.Tensor, tokens: torch.Tensor, mask: torch.Tensor) -> i
 
 @torch.no_grad()
 def accuracy(model, examples: Sequence[dict], device: str, encode: Encode) -> float:
-    """Fraction of examples whose lowest-loss ending is the labelled one."""
+    """Fraction of examples whose lowest-loss ending is the labelled one.
+
+    Examples are batched in order of length, which only reduces padding; each example is still
+    scored on its own endings, so the count of correct predictions is unchanged.
+    """
+    rendered = [render_example(example, encode) for example in examples]
+    order = sorted(range(len(rendered)), key=lambda index: rendered[index][0].size(1))
     correct = 0
-    for start in range(0, len(examples), EXAMPLES_PER_BATCH):
-        tokens, mask, labels = _render_batch(examples[start : start + EXAMPLES_PER_BATCH], encode)
+    for start in range(0, len(order), EXAMPLES_PER_BATCH):
+        tokens, mask, labels = _stack(
+            [rendered[index] for index in order[start : start + EXAMPLES_PER_BATCH]]
+        )
         tokens, mask = tokens.to(device), mask.to(device)
         count, width = tokens.size(0), tokens.size(2)
         with torch.autocast(device_type=device, dtype=torch.bfloat16):
