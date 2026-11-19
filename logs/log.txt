@@ -1,6 +1,0 @@
-0: validation loss: 10.9368
-0: Hellaswag accuracy normalized: 0.2419
-0: Loss 10.929380 | Grad Norm 16.5403 | LR 6.0000e-04 | Time 1557383.66ms | Tokens/s 336.65
-1: validation loss: 9.9654
-1: Hellaswag accuracy normalized: 0.2472
-1: Loss 9.985104 | Grad Norm 4.7086 | LR 6.0000e-04 | Time 1562330.01ms | Tokens/s 335.58
