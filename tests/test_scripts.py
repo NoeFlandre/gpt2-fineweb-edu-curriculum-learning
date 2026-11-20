@@ -2,6 +2,7 @@ import json
 import sys
 
 import numpy as np
+from gpt2_scratch.data.loader import TokenLoader
 from gpt2_scratch.data.shards import list_shards, load_shard
 from gpt2_scratch.publishing import MODEL_REPO
 from gpt2_scratch.training.config import TrainConfig
@@ -15,8 +16,12 @@ def encode(text):
     return np.array([EOT, *[ord(char) % 200 for char in text]], dtype=np.uint16)
 
 
+BUCKET_SCORES = [2.6, 3.2, 3.7, 4.2]
+
+
 def edu_row(index):
-    return {"text": f"document number {index}", "int_score": 3, "score": 3.0 + index / 100}
+    score = BUCKET_SCORES[index % 4] + index / 1000
+    return {"text": f"document number {index}", "int_score": round(score), "score": score}
 
 
 def test_piqa_rows_become_two_ending_examples():
@@ -51,20 +56,33 @@ def test_write_examples_writes_one_json_object_per_line(tmp_path):
     assert json.loads(path.read_text()) == {"ctx": "a", "endings": ["b"], "label": 0}
 
 
-def test_build_study_writes_each_arm_and_the_validation_split(tmp_path):
+def test_build_study_writes_each_arm_and_the_stratified_validation_split(tmp_path):
     rows = [edu_row(index) for index in range(40)]
 
-    prepare_data.build_study(rows, encode, tmp_path, pool_tokens=60, val_tokens=20, seed=1)
+    prepare_data.build_study(rows, encode, tmp_path, pool_tokens=64, val_tokens=40, seed=1)
 
     for arm in ("shuffle", "ascending", "descending", "cooldown"):
         tokens = load_shard(list_shards(tmp_path / "arms" / arm, "train")[0])
-        assert len(tokens) == 60
+        assert len(tokens) == 65
     validation = load_shard(list_shards(tmp_path / "validation", "val")[0])
     buckets = np.load(tmp_path / "validation" / "val_buckets.npy")
-    assert len(validation) == len(buckets) == 20
+    assert len(validation) == len(buckets) == 40
+    assert np.bincount(buckets, minlength=4).tolist() == [10, 10, 10, 10]
     report = json.loads((tmp_path / "validation" / "buckets.json").read_text())
     assert report["edges"] == [3.0, 3.5, 4.0]
-    assert sum(report["tokens"]) == 20
+    assert report["tokens"] == [10, 10, 10, 10]
+
+
+def test_each_arm_keeps_the_final_target_inside_its_shard(tmp_path):
+    rows = [edu_row(index) for index in range(40)]
+    prepare_data.build_study(rows, encode, tmp_path, pool_tokens=64, val_tokens=40, seed=1)
+    tokens = load_shard(list_shards(tmp_path / "arms" / "shuffle", "train")[0])
+    loader = TokenLoader(tmp_path / "arms" / "shuffle", "train", batch_size=2, seq_len=4)
+
+    for _ in range(8):  # eight micro-batches of 2 x 4 tokens read the 64 input tokens
+        _, y = loader.next_batch()
+
+    assert y.flatten().tolist() == tokens[57:65].tolist()
 
 
 def test_train_main_wires_the_arm_benchmarks_and_tracker_into_the_runner(monkeypatch):

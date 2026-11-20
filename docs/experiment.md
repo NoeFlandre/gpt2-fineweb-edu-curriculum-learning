@@ -29,8 +29,9 @@ published. Nothing is re-scored. The pool holds the documents whose rounded scor
 is `score >= 2.5`.
 
 Documents are joined with the `<|endoftext|>` token and cut into 1,024-token sequences. Each arm uses
-exactly 1,716 steps of 524,288 tokens, which is 899,678,208 tokens. Only the last document of an arm
-can be cut, at that boundary.
+exactly 1,716 steps of 524,288 tokens, which is 899,678,208 tokens. Each arm's shard holds one more
+token, so that the last input has its next-token target. Only the last document of an arm can be
+cut, at that boundary.
 
 ## Model
 
@@ -53,10 +54,12 @@ tokens per parameter.
 
 Evaluated every 50 steps and after the last step, 36 points per arm.
 
-- **Primary metric: score-stratified validation loss.** Two million tokens held out from the pool,
-  split by score into four buckets: [2.5, 3.0), [3.0, 3.5), [3.5, 4.0) and [4.0, 5.0]. Each bucket's
-  loss is logged as `val_loss_25_30`, `val_loss_30_35`, `val_loss_35_40` and `val_loss_40_50`. The
-  overall loss is `val_loss`. Each bucket's token count is in `validation/buckets.json`.
+- **Primary metric: score-stratified validation loss.** Two million held-out tokens, stratified by
+  score: 500,000 tokens in each of four buckets, [2.5, 3.0), [3.0, 3.5), [3.5, 4.0) and [4.0, 5.0].
+  They are drawn from the rows after the pool, until each bucket is full. Each bucket's loss is
+  logged as `val_loss_25_30`, `val_loss_30_35`, `val_loss_35_40` and `val_loss_40_50`. The overall
+  loss, `val_loss`, is the mean over all 2M tokens. Each bucket's token count is in
+  `validation/buckets.json`.
 - **Benchmarks:** HellaSwag (full validation set, 10,042 examples), PIQA (validation, 1,838) and
   ARC-Easy (test, 2,376), each scored by normalized accuracy. HellaSwag is scored as in the original
   repository: the ending with the lowest average per-token loss is the prediction.
@@ -70,8 +73,9 @@ missing.
 ## Limitations
 
 - One seed per arm. Differences smaller than seed-to-seed noise cannot be resolved.
-- The validation buckets come from the same FineWeb-Edu stream as the pool, so they test
-  generalization within that distribution, not to other web text.
+- The pool and the validation buckets come from the same FineWeb-Edu stream. Together they draw about
+  900M tokens through a 10,000-document shuffle buffer, roughly 1.3 of the sample's 14 files. They
+  test generalization within that slice, not to other web text.
 - Each arm's last document is cut at the token budget, so two arms can differ by part of one
   document.
 - The score is a learned proxy for educational quality, so the buckets measure the classifier's

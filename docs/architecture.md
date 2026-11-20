@@ -14,8 +14,9 @@ gpt2_scratch/
 ## Data flow
 
 1. `scripts/prepare_data.py` streams FineWeb-Edu. Rows with an integer score of at least 3 are
-   tokenized with an end-of-text prefix, and the first 899,678,208 tokens form the training pool.
-   The next 2M tokens form the validation split.
+   tokenized with an end-of-text prefix, and the first 899,678,208 tokens form the training pool,
+   plus one token so the last input of an arm has its target. The validation split is drawn from
+   the rows after the pool: 500k tokens in each score bucket, until every bucket is full.
 2. Each arm's order is computed from the pool's continuous `score` column (`experiment/arms.py`),
    and the documents are concatenated in that order (`data/corpus.py`) into one shard per arm.
 3. The validation split keeps each token's score bucket, fixed at [2.5, 3.0), [3.0, 3.5),

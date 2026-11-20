@@ -3,16 +3,19 @@ import pytest
 import torch
 from gpt2_scratch.data.corpus import (
     Document,
+    StreamTooShortError,
     arm_tokens,
-    bucket_ids,
+    bucket_of,
     collect_documents,
+    collect_stratified,
     split_pool_and_validation,
-    token_scores,
+    token_buckets,
 )
 from gpt2_scratch.data.loader import TokenLoader
 from gpt2_scratch.data.shards import list_shards, load_shard, save_shard
 
 EOT = 50256
+BUCKET_SCORES = [2.6, 3.2, 3.7, 4.2]
 
 
 def encode(text):
@@ -21,6 +24,11 @@ def encode(text):
 
 def row(text, int_score=3, score=3.1):
     return {"text": text, "int_score": int_score, "score": score}
+
+
+def spread_rows(count):
+    """Rows whose scores cycle through the four buckets, each score unique."""
+    return [row(f"doc{i}", 3, BUCKET_SCORES[i % 4] + i / 1000) for i in range(count)]
 
 
 def test_collect_documents_keeps_rows_whose_integer_score_is_three_or_more():
@@ -54,14 +62,49 @@ def test_documents_start_with_the_end_of_text_token():
     assert docs[0].tokens[0] == EOT
 
 
-def test_split_keeps_validation_documents_out_of_the_pool():
-    rows = [row(f"doc{i}", 3, 3.0 + i / 100) for i in range(10)]
+def test_collect_stratified_fills_each_bucket_to_its_quota():
+    rows = iter(
+        [
+            row("drop", 2, 4.5),
+            row("abcd", 3, 2.6),
+            row("efgh", 3, 2.7),
+            row("ijkl", 3, 2.8),
+            row("mnop", 3, 3.2),
+            row("qr", 3, 3.3),
+            row("st", 3, 3.7),
+            row("uvwxyz", 3, 3.8),
+            row("abc", 3, 4.2),
+            row("defgh", 3, 4.4),
+        ]
+    )
 
-    pool, validation = split_pool_and_validation(rows, encode, pool_tokens=20, val_tokens=20)
+    docs = collect_stratified(rows, encode, quota=6)
+
+    assert [doc.score for doc in docs] == [2.6, 2.7, 3.2, 3.3, 3.7, 3.8, 4.2, 4.4]
+    assert [len(doc.tokens) for doc in docs] == [5, 1, 5, 1, 3, 3, 4, 2]
+
+
+def test_collect_stratified_fails_when_the_rows_end_before_every_bucket_is_full():
+    with pytest.raises(StreamTooShortError, match="each needs 6"):
+        collect_stratified(iter([row("ab", 3, 2.6)]), encode, quota=6)
+
+
+def test_split_keeps_validation_documents_out_of_the_pool():
+    pool, validation = split_pool_and_validation(
+        spread_rows(40), encode, pool_tokens=20, val_tokens=40
+    )
 
     assert len(pool) == 4
-    assert len(validation) == 4
     assert {doc.score for doc in pool}.isdisjoint({doc.score for doc in validation})
+
+
+def test_validation_holds_the_same_number_of_tokens_in_every_bucket():
+    _, validation = split_pool_and_validation(
+        spread_rows(40), encode, pool_tokens=20, val_tokens=40
+    )
+
+    counts = np.bincount(token_buckets(validation), minlength=4)
+    assert counts.tolist() == [10, 10, 10, 10]
 
 
 def test_arm_tokens_are_exactly_the_budget_in_document_order():
@@ -76,21 +119,21 @@ def test_arm_tokens_are_exactly_the_budget_in_document_order():
     assert tokens.dtype == np.uint16
 
 
-def test_token_scores_repeat_each_document_score_for_its_tokens():
+def test_score_buckets_follow_the_fixed_edges_from_2_5_to_5():
+    scores = [2.5, 2.99, 3.0, 3.49, 3.5, 3.99, 4.0, 5.0]
+
+    assert [bucket_of(score) for score in scores] == [0, 0, 1, 1, 2, 2, 3, 3]
+
+
+def test_token_buckets_repeat_each_document_bucket_for_its_tokens():
     docs = [
         Document(np.array([EOT, 1], dtype=np.uint16), 3.5),
         Document(np.array([EOT], dtype=np.uint16), 4.5),
     ]
 
-    assert token_scores(docs).tolist() == [3.5, 3.5, 4.5]
+    buckets = token_buckets(docs)
 
-
-def test_score_buckets_follow_the_fixed_edges_from_2_5_to_5():
-    scores = np.array([2.5, 2.99, 3.0, 3.49, 3.5, 3.99, 4.0, 5.0], dtype=np.float32)
-
-    buckets = bucket_ids(scores)
-
-    assert buckets.tolist() == [0, 0, 1, 1, 2, 2, 3, 3]
+    assert buckets.tolist() == [2, 2, 3]
     assert buckets.dtype == np.uint8
 
 

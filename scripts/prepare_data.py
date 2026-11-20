@@ -15,11 +15,11 @@ import numpy as np
 import tiktoken
 from datasets import load_dataset
 from gpt2_scratch.data.corpus import (
+    BUCKET_COUNT,
     SCORE_EDGES,
     arm_tokens,
-    bucket_ids,
     split_pool_and_validation,
-    token_scores,
+    token_buckets,
 )
 from gpt2_scratch.data.shards import save_shard
 from gpt2_scratch.data.tokenize import encode_document
@@ -39,19 +39,24 @@ def build_study(
     val_tokens: int,
     seed: int,
 ) -> None:
-    """Write each arm's token shard, and the validation shard with its score buckets."""
-    pool, validation = split_pool_and_validation(rows, encode, pool_tokens, val_tokens)
+    """Write each arm's token shard, and the stratified validation shard with its score buckets.
+
+    Each arm's shard holds one token more than the budget, so the last input of the arm has its
+    next-token target inside the shard.
+    """
+    shard_tokens = pool_tokens + 1
+    pool, validation = split_pool_and_validation(rows, encode, shard_tokens, val_tokens)
     scores = np.array([doc.score for doc in pool])
     lengths = np.array([len(doc.tokens) for doc in pool])
     for arm in ORDERINGS:
         order = arm_order(arm, scores, lengths, pool_tokens, seed)
-        save_shard(out / "arms" / arm, "train", 0, arm_tokens(pool, order, pool_tokens))
-    validation_tokens = arm_tokens(validation, np.arange(len(validation)), val_tokens)
-    per_token = token_scores(validation)[: len(validation_tokens)]
-    buckets = bucket_ids(per_token)
+        save_shard(out / "arms" / arm, "train", 0, arm_tokens(pool, order, shard_tokens))
+    validation_tokens = np.concatenate([doc.tokens for doc in validation])
+    buckets = token_buckets(validation)
     save_shard(out / "validation", "val", 0, validation_tokens)
     np.save(out / "validation" / "val_buckets.npy", buckets)
-    report = {"edges": SCORE_EDGES.tolist(), "tokens": np.bincount(buckets, minlength=4).tolist()}
+    counts = np.bincount(buckets, minlength=BUCKET_COUNT)
+    report = {"edges": SCORE_EDGES.tolist(), "tokens": counts.tolist()}
     (out / "validation" / "buckets.json").write_text(json.dumps(report))
 
 

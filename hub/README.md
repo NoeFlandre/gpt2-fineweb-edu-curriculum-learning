@@ -24,8 +24,9 @@ FineWeb-Edu documents, in four orders of the same pool:
 | `cooldown` | Lowest-scoring 80% of tokens shuffled, then the highest-scoring 20% shuffled |
 
 **Live results:** the [Trackio dashboard](https://huggingface.co/spaces/NoeFlandre/gpt2-fineweb-edu-ordering-trackio)
-shows the validation loss per FineWeb-Edu score bucket (the primary metric), the overall validation
-loss, and HellaSwag, PIQA and ARC-Easy accuracy, every 50 steps.
+shows the training loss at every step, and the validation loss per FineWeb-Edu score bucket (the
+primary metric), the overall validation loss, and HellaSwag, PIQA and ARC-Easy accuracy, every 50
+steps. The dashboard is synced every 50 steps and at the end of the run.
 
 Score buckets: [2.5, 3.0), [3.0, 3.5), [3.5, 4.0), [4.0, 5.0].
 

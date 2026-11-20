@@ -34,7 +34,25 @@ def test_start_creates_a_named_trackio_run(monkeypatch):
     assert (tracker.project, tracker.space_id, tracker.bucket_id) == ("p", "s", "b")
 
 
-def test_a_training_record_publishes_the_dashboard(monkeypatch):
+def test_every_training_step_is_logged_but_the_dashboard_syncs_every_fifty(monkeypatch):
+    logged = []
+    published = []
+    monkeypatch.setattr(tracking.trackio, "log", lambda _metrics, step: logged.append(step))
+    monkeypatch.setattr(
+        tracking,
+        "publish",
+        lambda project, _space_id, _bucket_id: published.append(project) or "url",
+    )
+    tracker = tracking.TrackioTracker("p", "space", "bucket")
+
+    for step in range(51):
+        tracker.log({"train_loss": 3.0}, step=step)
+
+    assert logged == list(range(51))
+    assert published == ["p", "p"]
+
+
+def test_evaluation_records_are_logged_without_a_sync(monkeypatch):
     published = []
     monkeypatch.setattr(tracking.trackio, "log", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
@@ -44,11 +62,9 @@ def test_a_training_record_publishes_the_dashboard(monkeypatch):
     )
     tracker = tracking.TrackioTracker("p", "space", "bucket")
 
-    tracker.log({"val_loss": 3.0}, step=0)
-    assert published == []
+    tracker.log({"val_loss": 3.0}, step=50)
 
-    tracker.log({"train_loss": 3.1}, step=1)
-    assert published == ["p"]
+    assert published == []
 
 
 def test_finish_closes_the_run_and_publishes_its_final_state(monkeypatch):

@@ -1,7 +1,8 @@
 """Experiment tracking with Trackio, published as a live static dashboard on Hugging Face.
 
-Runs log to a local Trackio project. Every optimizer step, the project is synced to a
-static Space backed by a Hugging Face bucket, so the dashboard stays current during training.
+Every metric is logged as it is produced. Every PUBLISH_EVERY training steps, and at the end, the
+project is synced to a static Space backed by a Hugging Face bucket, so the dashboard stays current
+during training.
 """
 
 import trackio
@@ -10,6 +11,7 @@ from trackio import context_vars
 TRACKIO_PROJECT = "gpt2-fineweb-edu-ordering"
 TRACKIO_SPACE = "NoeFlandre/gpt2-fineweb-edu-ordering-trackio"
 TRACKIO_BUCKET = "NoeFlandre/gpt2-fineweb-edu-ordering-trackio-bucket"
+PUBLISH_EVERY = 50
 
 
 def publish(project: str, space_id: str, bucket_id: str) -> str:
@@ -46,9 +48,9 @@ class TrackioTracker:
         return cls(project, space_id, bucket_id)
 
     def log(self, metrics: dict, step: int) -> None:
-        """Record metrics at a step; publish after each training step."""
+        """Record metrics at a step; publish every PUBLISH_EVERY training steps."""
         trackio.log(metrics, step=step)
-        if "train_loss" in metrics:
+        if "train_loss" in metrics and step % PUBLISH_EVERY == 0:
             self._publish()
 
     def finish(self) -> None:
