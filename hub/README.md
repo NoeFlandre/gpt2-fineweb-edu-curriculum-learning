@@ -47,7 +47,7 @@ in which documents are seen.
 
 ## Data
 
-The training pool is a shuffled slice of FineWeb-Edu `sample-10BT`, about 1.2 of its 14 files. Every document in the sample scores at least 2.5. The score mix, measured over the whole sample (9,672,101 documents, 9.97B GPT-2 tokens):
+The training pool is a shuffled slice of FineWeb-Edu `sample-10BT`, about 1.3 of its 14 files. Every document in the sample scores at least 2.5. The score mix, measured over the whole sample (9,672,101 documents, 9.97B GPT-2 tokens):
 
 | Score bucket | Share of documents | Share of tokens |
 |---|---|---|

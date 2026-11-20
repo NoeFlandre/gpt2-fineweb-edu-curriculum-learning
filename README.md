@@ -33,7 +33,7 @@ The pool is a slice of FineWeb-Edu `sample-10BT`, shuffled through a 10,000-docu
 | [3.5, 4.0) | 11.2% | 11.9% |
 | [4.0, 5.0] | 2.1% | 2.1% |
 
-The pool holds 871,635 documents, roughly 1.2 of the sample's 14 files. Each file's shares lie within 0.4 percentage points of the table. The pool's exact mix was not counted, because its scores are not stored when the data is built.
+The pool holds 871,635 documents, roughly 1.3 of the sample's 14 files. Each file's shares lie within 0.4 percentage points of the table. The pool's exact mix was not counted, because its scores are not stored when the data is built.
 
 Method and limitations: [docs/experiment.md](docs/experiment.md).
 
