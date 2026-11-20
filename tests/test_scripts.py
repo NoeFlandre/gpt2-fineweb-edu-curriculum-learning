@@ -1,5 +1,7 @@
+import io
 import json
 import sys
+import zipfile
 
 import numpy as np
 from gpt2_scratch.data.loader import TokenLoader
@@ -150,19 +152,40 @@ def test_upload_main_uploads_the_runs_and_card_then_publishes_the_dashboard(monk
     assert published == [(TRACKIO_PROJECT, TRACKIO_SPACE, TRACKIO_BUCKET)]
 
 
+def piqa_archive(rows, labels):
+    """An in-memory copy of the PIQA zip that ybisk/piqa downloads, with a dev split."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("physicaliqa-train-dev/dev.jsonl", "\n".join(json.dumps(r) for r in rows))
+        archive.writestr("physicaliqa-train-dev/dev-labels.lst", "\n".join(labels))
+    return zipfile.ZipFile(io.BytesIO(buffer.getvalue()))
+
+
+def test_piqa_validation_reads_each_dev_row_with_its_integer_label():
+    rows = [
+        {"goal": "Cook rice", "sol1": "boil water", "sol2": "freeze it"},
+        {"goal": "Dry socks", "sol1": "hang them", "sol2": "freeze them"},
+    ]
+
+    examples = prepare_benchmarks.piqa_validation(piqa_archive(rows, ["0", "1"]))
+
+    assert examples == [
+        {"ctx": "Cook rice", "endings": ["boil water", "freeze it"], "label": 0},
+        {"ctx": "Dry socks", "endings": ["hang them", "freeze them"], "label": 1},
+    ]
+
+
 def test_prepare_benchmarks_writes_piqa_and_arc_easy(monkeypatch, tmp_path):
-    piqa_row = {"goal": "Cook rice", "sol1": "boil water", "sol2": "freeze it", "label": 0}
+    piqa_row = {"goal": "Cook rice", "sol1": "boil water", "sol2": "freeze it"}
     arc_row = {
         "question": "What warms a room?",
         "choices": {"text": ["ice", "heater"], "label": ["A", "B"]},
         "answerKey": "B",
     }
-    splits = {("baber/piqa", "validation"): [piqa_row], ("allenai/ai2_arc", "test"): [arc_row]}
-
-    def fake_load(name, *_args, split):
-        return splits[(name, split)]
-
-    monkeypatch.setattr(prepare_benchmarks, "load_dataset", fake_load)
+    monkeypatch.setattr(
+        prepare_benchmarks, "download_piqa", lambda: piqa_archive([piqa_row], ["0"])
+    )
+    monkeypatch.setattr(prepare_benchmarks, "load_dataset", lambda *_args, **_kwargs: [arc_row])
 
     prepare_benchmarks.write_benchmarks(tmp_path)
 
