@@ -1,20 +1,17 @@
 [project]
-name = "gpt2-from-scratch"
+name = "gpt2-fineweb-edu-ordering"
 version = "0.1.0"
-description = "Add your description here"
+description = "GPT-2 on FineWeb-Edu: does the order of documents matter?"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "datasets>=5.1.0",
+    "huggingface-hub>=2.2.0",
     "matplotlib>=3.11.2",
     "numpy>=2.5.4",
-    "pandas>=3.0.6",
-    "requests>=2.34.2",
     "tiktoken>=0.14.0",
     "torch>=2.14.1",
-    "tqdm>=4.70.1",
     "trackio==0.45.1",
-    "transformers>=5.20.1",
 ]
 
 [dependency-groups]
@@ -46,8 +43,14 @@ line-length = 100
 src = ["gpt2_scratch", "tests", "scripts"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "SIM", "N", "D"]
+select = [
+    "E", "F", "I", "B", "UP", "SIM", "N", "D",
+    "ARG", "RET", "C90", "PERF", "RUF", "PIE", "PT", "PTH", "C4", "ERA", "FURB", "TRY",
+]
 ignore = ["D100", "D104", "D107", "N812"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 5
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

@@ -15,7 +15,6 @@ class MLP(nn.Module):
         self.l1 = nn.Linear(config.n_embd, 4 * config.n_embd)
         self.gelu = nn.GELU(approximate="tanh")
         self.l2 = nn.Linear(4 * config.n_embd, config.n_embd)
-        self.l2.WEIGHT_SCALE_INIT = 1  # ty: ignore[invalid-assignment]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply the feed-forward network to every position."""

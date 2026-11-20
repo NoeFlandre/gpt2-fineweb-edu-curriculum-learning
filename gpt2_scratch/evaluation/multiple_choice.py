@@ -5,7 +5,7 @@ loss over the ending tokens (normalized accuracy); the lowest-loss ending is the
 """
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import torch
@@ -87,7 +87,11 @@ def completion_losses(
 
 @torch.no_grad()
 def accuracy(
-    model, examples: list[dict], device: str, encode: Encode, batch_size: int = EXAMPLES_PER_BATCH
+    model,
+    examples: Sequence[dict],
+    device: str,
+    encode: Encode,
+    batch_size: int = EXAMPLES_PER_BATCH,
 ) -> float:
     """Fraction of examples whose lowest-loss ending is the labelled one.
 

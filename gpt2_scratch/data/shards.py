@@ -19,9 +19,16 @@ def load_shard(path: Path | str) -> np.ndarray:
     return np.load(path)
 
 
+class NoShardsError(FileNotFoundError):
+    """A split has no shard files in its folder."""
+
+    def __init__(self, split: str, directory: Path | str) -> None:
+        super().__init__(f"no {split} shards in {directory}")
+
+
 def list_shards(directory: Path | str, split: str) -> list[Path]:
     """Every shard of a split, sorted by name."""
     paths = sorted(Path(directory).glob(f"{split}_*.npy"))
     if not paths:
-        raise FileNotFoundError(f"no {split} shards in {directory}")
+        raise NoShardsError(split, directory)
     return paths

@@ -7,7 +7,7 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.pyplot as plt
 
 BUCKET_KEYS = ["val_loss_25_30", "val_loss_30_35", "val_loss_35_40", "val_loss_40_50"]
 BENCHMARK_KEYS = ["hellaswag_acc", "piqa_acc", "arc_easy_acc"]

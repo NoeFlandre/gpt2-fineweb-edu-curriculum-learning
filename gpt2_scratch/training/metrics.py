@@ -15,12 +15,16 @@ class Tracker(Protocol):
         """Close the run."""
 
 
+def _read_records(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
 def _kept_lines(path: Path, keep_before: int) -> str:
-    """Records of an earlier run that come before the step a resumed run starts from."""
-    if keep_before <= 0 or not path.exists():
-        return ""
-    lines = [json.loads(line) for line in path.read_text().splitlines()]
-    return "".join(json.dumps(line) + "\n" for line in lines if line["step"] < keep_before)
+    """The records of an earlier run that precede the step a resumed run starts from."""
+    records = _read_records(path) if keep_before > 0 else []
+    return "".join(json.dumps(record) + "\n" for record in records if record["step"] < keep_before)
 
 
 class MetricsLog:

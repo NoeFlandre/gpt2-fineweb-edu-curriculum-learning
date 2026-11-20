@@ -4,8 +4,9 @@ import sys
 import numpy as np
 from gpt2_scratch.data.shards import list_shards, load_shard
 from gpt2_scratch.publishing import MODEL_REPO
+from gpt2_scratch.training.config import TrainConfig
 from gpt2_scratch.training.tracking import TRACKIO_BUCKET, TRACKIO_PROJECT, TRACKIO_SPACE
-from scripts import prepare_benchmarks, prepare_data, train, upload
+from scripts import prepare_benchmarks, prepare_data, report, train, upload
 
 EOT = 50256
 
@@ -71,7 +72,7 @@ def test_train_main_wires_the_arm_benchmarks_and_tracker_into_the_runner(monkeyp
 
     class FakeTracker:
         @classmethod
-        def start(cls, project, name, config, space_id, bucket_id):
+        def start(cls, project, name, space_id, bucket_id, **_kwargs):
             captured.update(project=project, name=name, space=space_id, bucket=bucket_id)
             return cls()
 
@@ -79,7 +80,7 @@ def test_train_main_wires_the_arm_benchmarks_and_tracker_into_the_runner(monkeyp
             captured["finished"] = True
 
     def fake_train(
-        cfg, arm, model_config, data, out, device, benchmarks, encode, tracker, on_checkpoint
+        _cfg, arm, _model_config, _data, out, device, *, benchmarks, on_checkpoint, **_kwargs
     ):
         captured.update(arm=arm, out=out, benchmarks=sorted(benchmarks), device=device)
         assert on_checkpoint is None
@@ -87,7 +88,7 @@ def test_train_main_wires_the_arm_benchmarks_and_tracker_into_the_runner(monkeyp
 
     monkeypatch.setattr(train, "TrackioTracker", FakeTracker)
     monkeypatch.setattr(train, "train", fake_train)
-    monkeypatch.setattr(train, "load_examples", lambda path: [{"label": 0}])
+    monkeypatch.setattr(train, "load_examples", lambda _path: [{"label": 0}])
     monkeypatch.setattr(
         sys,
         "argv",
@@ -129,3 +130,172 @@ def test_upload_main_uploads_the_runs_and_card_then_publishes_the_dashboard(monk
     assert uploads[0][1]["repo_id"] == MODEL_REPO
     assert uploads[1][1]["path_in_repo"] == "README.md"
     assert published == [(TRACKIO_PROJECT, TRACKIO_SPACE, TRACKIO_BUCKET)]
+
+
+def test_prepare_benchmarks_writes_piqa_and_arc_easy(monkeypatch, tmp_path):
+    piqa_row = {"goal": "Cook rice", "sol1": "boil water", "sol2": "freeze it", "label": 0}
+    arc_row = {
+        "question": "What warms a room?",
+        "choices": {"text": ["ice", "heater"], "label": ["A", "B"]},
+        "answerKey": "B",
+    }
+    splits = {("baber/piqa", "validation"): [piqa_row], ("allenai/ai2_arc", "test"): [arc_row]}
+
+    def fake_load(name, *_args, split):
+        return splits[(name, split)]
+
+    monkeypatch.setattr(prepare_benchmarks, "load_dataset", fake_load)
+
+    prepare_benchmarks.write_benchmarks(tmp_path)
+
+    piqa = json.loads((tmp_path / "piqa.jsonl").read_text())
+    assert piqa == {"ctx": "Cook rice", "endings": ["boil water", "freeze it"], "label": 0}
+    arc = json.loads((tmp_path / "arc_easy.jsonl").read_text())
+    assert arc["label"] == 1
+
+
+def test_prepare_benchmarks_main_writes_into_the_output_folder(monkeypatch, tmp_path):
+    written = []
+    monkeypatch.setattr(prepare_benchmarks, "write_benchmarks", written.append)
+    monkeypatch.setattr(sys, "argv", ["prepare_benchmarks", "--out", str(tmp_path)])
+
+    prepare_benchmarks.main()
+
+    assert written == [tmp_path]
+
+
+def test_prepare_data_main_streams_fineweb_edu_into_the_study(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeEncoder:
+        eot_token = 50256
+
+        def encode_ordinary(self, text):
+            return [ord(char) for char in text]
+
+    class FakeStream:
+        def shuffle(self, seed, buffer_size):
+            captured["shuffle"] = (seed, buffer_size)
+            return ["row"]
+
+    def fake_load_dataset(dataset, **kwargs):
+        captured["dataset"] = (dataset, kwargs)
+        return FakeStream()
+
+    def fake_build_study(rows, encode, out, pool_tokens, val_tokens, seed):
+        captured.update(
+            rows=rows,
+            encoded=encode("a").tolist(),
+            out=out,
+            pool_tokens=pool_tokens,
+            val_tokens=val_tokens,
+            seed=seed,
+        )
+
+    monkeypatch.setattr(prepare_data.tiktoken, "get_encoding", lambda _name: FakeEncoder())
+    monkeypatch.setattr(prepare_data, "load_dataset", fake_load_dataset)
+    monkeypatch.setattr(prepare_data, "build_study", fake_build_study)
+    monkeypatch.setattr(sys, "argv", ["prepare_data", "--out", str(tmp_path)])
+
+    prepare_data.main()
+
+    cfg = TrainConfig()
+    assert captured["dataset"] == (
+        prepare_data.EDU,
+        {"name": "sample-10BT", "split": "train", "streaming": True},
+    )
+    assert captured["shuffle"] == (cfg.seed, prepare_data.STREAM_BUFFER)
+    assert captured["rows"] == ["row"]
+    assert captured["encoded"] == [50256, 97]
+    assert captured["out"] == tmp_path
+    assert captured["pool_tokens"] == cfg.max_steps * cfg.total_batch_size
+    assert captured["val_tokens"] == prepare_data.VAL_TOKENS
+    assert captured["seed"] == cfg.seed
+
+
+def test_run_folders_keeps_the_folders_that_hold_metrics(tmp_path):
+    for name in ("shuffle", "cooldown", "figures"):
+        (tmp_path / name).mkdir()
+    for name in ("shuffle", "cooldown"):
+        (tmp_path / name / "metrics.jsonl").write_text("{}\n")
+
+    assert report.run_folders(tmp_path) == {
+        "cooldown": tmp_path / "cooldown",
+        "shuffle": tmp_path / "shuffle",
+    }
+
+
+def test_report_main_plots_every_run_and_lists_the_figures(monkeypatch, tmp_path, capsys):
+    (tmp_path / "shuffle").mkdir()
+    (tmp_path / "shuffle" / "metrics.jsonl").write_text("{}\n")
+    plotted = []
+
+    def fake_plot_runs(runs, out):
+        plotted.append((runs, out))
+        return [out / "training_loss.png"]
+
+    monkeypatch.setattr(report, "plot_runs", fake_plot_runs)
+    monkeypatch.setattr(
+        sys, "argv", ["report", "--runs", str(tmp_path), "--out", str(tmp_path / "figs")]
+    )
+
+    report.main()
+
+    assert plotted == [({"shuffle": tmp_path / "shuffle"}, tmp_path / "figs")]
+    assert str(tmp_path / "figs" / "training_loss.png") in capsys.readouterr().out
+
+
+def test_hub_checkpointer_defers_a_failed_upload(monkeypatch, tmp_path, capsys):
+    published = []
+
+    def fake_publish(_api, repo, arm, _out, step):
+        if step == 4:
+            rate_limit = "rate limited"
+            raise RuntimeError(rate_limit)
+        published.append((repo, arm, step))
+
+    monkeypatch.setattr(train, "HfApi", lambda: "api")
+    monkeypatch.setattr(train, "publish_checkpoint", fake_publish)
+    checkpoint = train._hub_checkpointer("user/repo", "shuffle")
+
+    checkpoint(tmp_path, 2)
+    checkpoint(tmp_path, 4)
+
+    assert published == [("user/repo", "shuffle", 2)]
+    assert "checkpoint upload deferred (RuntimeError) at step 4" in capsys.readouterr().out
+
+
+def test_main_resumes_from_the_hub_checkpoint_and_publishes_its_checkpoints(
+    monkeypatch, tmp_path, capsys
+):
+    published = []
+
+    class FakeTracker:
+        @classmethod
+        def start(cls, **_kwargs):
+            return cls()
+
+        def finish(self):
+            pass
+
+    def fake_train(*_args, on_checkpoint, **_kwargs):
+        on_checkpoint(tmp_path, 100)
+        return {"steps": 0}
+
+    def fake_publish(_api, _repo, _arm, _out, step):
+        published.append(step)
+
+    monkeypatch.setattr(train, "fetch_checkpoint", lambda *_args: True)
+    monkeypatch.setattr(train, "HfApi", lambda: "api")
+    monkeypatch.setattr(train, "publish_checkpoint", fake_publish)
+    monkeypatch.setattr(train, "TrackioTracker", FakeTracker)
+    monkeypatch.setattr(train, "train", fake_train)
+    monkeypatch.setattr(train, "load_examples", lambda _path: [])
+    monkeypatch.setattr(
+        sys, "argv", ["train", "--arm", "shuffle", "--out", str(tmp_path), "--device", "cpu"]
+    )
+
+    train.main()
+
+    assert published == [100]
+    assert "resuming shuffle" in capsys.readouterr().out

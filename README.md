@@ -2,7 +2,9 @@
 
 A 45M-parameter GPT-2, trained from scratch on [FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu). Four orders of the same 900M-token pool are compared, with documents ordered by their educational score.
 
-**Status:** the code and tests are in place; the experiment has not been run yet. Results will be published here and on the Hugging Face Hub.
+**Status:** the code and tests are in place; the experiment has not been run yet.
+
+**Results:** the live [Trackio dashboard](https://huggingface.co/spaces/NoeFlandre/gpt2-fineweb-edu-ordering-trackio) and the [model repository](https://huggingface.co/NoeFlandre/gpt2-fineweb-edu-ordering) with checkpoints and the model card. Both are published by the first run.
 
 ## The experiment
 

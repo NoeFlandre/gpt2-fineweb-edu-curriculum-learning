@@ -1,7 +1,10 @@
 from pathlib import Path
 
+import pytest
 from gpt2_scratch import publishing
 from huggingface_hub.utils import EntryNotFoundError
+
+NO_CHECKPOINT = "no checkpoint"
 
 
 class FakeApi:
@@ -32,8 +35,8 @@ def test_publish_checkpoint_uploads_the_checkpoint_and_metrics_in_one_commit(tmp
 
 
 def test_fetch_checkpoint_reports_none_when_the_hub_has_no_checkpoint(monkeypatch, tmp_path):
-    def missing(*args, **kwargs):
-        raise EntryNotFoundError("no checkpoint")
+    def missing(*_args, **_kwargs):
+        raise EntryNotFoundError(NO_CHECKPOINT)
 
     monkeypatch.setattr(publishing, "hf_hub_download", missing)
 
@@ -43,7 +46,7 @@ def test_fetch_checkpoint_reports_none_when_the_hub_has_no_checkpoint(monkeypatc
 def test_fetch_checkpoint_moves_the_download_into_the_run_folder(monkeypatch, tmp_path):
     out = tmp_path / "uniform"
 
-    def download(repo, filename, repo_type, local_dir):
+    def download(_repo, filename, *, local_dir, **_kwargs):
         assert filename == "runs/uniform/checkpoint.pt"
         path = Path(local_dir) / filename
         path.parent.mkdir(parents=True)
@@ -62,8 +65,8 @@ def test_fetch_checkpoint_moves_the_download_into_the_run_folder(monkeypatch, tm
 def test_fetch_checkpoint_keeps_a_local_checkpoint_without_downloading(monkeypatch, tmp_path):
     (tmp_path / "checkpoint.pt").write_bytes(b"local")
 
-    def forbidden(*args, **kwargs):
-        raise AssertionError("a local checkpoint must not be downloaded again")
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("a local checkpoint must not be downloaded again")
 
     monkeypatch.setattr(publishing, "hf_hub_download", forbidden)
 
@@ -73,10 +76,10 @@ def test_fetch_checkpoint_keeps_a_local_checkpoint_without_downloading(monkeypat
 def test_fetch_checkpoint_leaves_no_download_folders_when_the_hub_has_none(monkeypatch, tmp_path):
     out = tmp_path / "uniform"
 
-    def missing(repo, filename, repo_type, local_dir):
+    def missing(_repo, _filename, *, local_dir, **_kwargs):
         (Path(local_dir) / "runs" / "uniform").mkdir(parents=True)
         (Path(local_dir) / ".cache").mkdir()
-        raise EntryNotFoundError("no checkpoint")
+        raise EntryNotFoundError(NO_CHECKPOINT)
 
     monkeypatch.setattr(publishing, "hf_hub_download", missing)
 

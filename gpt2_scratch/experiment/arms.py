@@ -6,6 +6,13 @@ ORDERINGS = ("shuffle", "ascending", "descending", "cooldown")
 COOLDOWN_SHARE = 0.8
 
 
+class UnknownOrderingError(ValueError):
+    """An ordering name that is not one of ORDERINGS."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"unknown ordering {name!r}")
+
+
 def arm_order(
     name: str, scores: np.ndarray, lengths: np.ndarray, budget: int, seed: int
 ) -> np.ndarray:
@@ -19,7 +26,7 @@ def arm_order(
         seed: Seed for the random shuffles.
     """
     if name not in ORDERINGS:
-        raise ValueError(f"unknown ordering {name!r}")
+        raise UnknownOrderingError(name)
     rng = np.random.default_rng(seed)
     if name == "shuffle":
         return rng.permutation(len(scores))

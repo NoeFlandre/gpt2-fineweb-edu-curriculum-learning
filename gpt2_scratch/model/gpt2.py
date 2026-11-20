@@ -20,16 +20,20 @@ class GPT2(nn.Module):
         self.config = config
         self.wte = nn.Embedding(config.vocab_size, config.n_embd)
         self.wpe = nn.Embedding(config.block_size, config.n_embd)
-        self.blocks = nn.ModuleList([Block(config) for _ in range(config.n_layer)])
+        blocks = [Block(config) for _ in range(config.n_layer)]
+        self.blocks = nn.ModuleList(blocks)
         self.ln_f = nn.LayerNorm(config.n_embd)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.lm_head.weight = self.wte.weight
+        self.residual_layers = {block.attn.proj for block in blocks} | {
+            block.mlp.l2 for block in blocks
+        }
         self.apply(self._init_weights)
 
     def _init_weights(self, module: nn.Module) -> None:
         if isinstance(module, nn.Linear):
             std = 0.02
-            if hasattr(module, "WEIGHT_SCALE_INIT"):
+            if module in self.residual_layers:
                 std *= (2 * self.config.n_layer) ** -0.5
             nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:

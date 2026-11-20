@@ -1,6 +1,6 @@
 """Write the multiple-choice benchmarks of the study as JSON Lines files.
 
-HellaSwag is already local (data/benchmarks/hellaswag.jsonl). This writes PIQA and ARC-Easy.
+HellaSwag is already in data/benchmarks/hellaswag.jsonl. This writes PIQA and ARC-Easy.
 
 Example: python -m scripts.prepare_benchmarks --out data/benchmarks
 """
@@ -18,7 +18,7 @@ def piqa_example(row: dict) -> dict:
 
 
 def arc_example(row: dict) -> dict:
-    """An ARC question with its choices, the answer being the position of its letter."""
+    """An ARC question with its choices; the label is the position of the answer."""
     choices = row["choices"]
     return {
         "ctx": f"Question: {row['question']}\nAnswer:",
@@ -33,15 +33,19 @@ def write_examples(path: Path, examples: list[dict]) -> None:
     path.write_text("".join(json.dumps(example) + "\n" for example in examples))
 
 
+def write_benchmarks(out: Path) -> None:
+    """Download PIQA (validation) and ARC-Easy (test) and write them into out."""
+    piqa = load_dataset("baber/piqa", split="validation")
+    write_examples(out / "piqa.jsonl", [piqa_example(row) for row in piqa])
+    arc = load_dataset("allenai/ai2_arc", "ARC-Easy", split="test")
+    write_examples(out / "arc_easy.jsonl", [arc_example(row) for row in arc])
+
+
 def main() -> None:
-    """Download PIQA (validation) and ARC-Easy (test) and write them."""
+    """Read the output folder and write the benchmarks."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=Path("data/benchmarks"))
-    args = parser.parse_args()
-    piqa = load_dataset("baber/piqa", split="validation")
-    write_examples(args.out / "piqa.jsonl", [piqa_example(row) for row in piqa])
-    arc = load_dataset("allenai/ai2_arc", "ARC-Easy", split="test")
-    write_examples(args.out / "arc_easy.jsonl", [arc_example(row) for row in arc])
+    write_benchmarks(parser.parse_args().out)
 
 
 if __name__ == "__main__":

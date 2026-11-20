@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+BATCH_SPLIT_MESSAGE = "total_batch_size must be divisible by micro_batch_size * sequence_length"
+
 
 @dataclass(frozen=True)
 class TrainConfig:
@@ -29,9 +31,7 @@ class TrainConfig:
     def __post_init__(self) -> None:
         """Check that the batch splits into whole micro-batches."""
         if self.total_batch_size % (self.micro_batch_size * self.sequence_length) != 0:
-            raise ValueError(
-                "total_batch_size must be divisible by micro_batch_size * sequence_length"
-            )
+            raise ValueError(BATCH_SPLIT_MESSAGE)
 
     @property
     def max_steps(self) -> int:

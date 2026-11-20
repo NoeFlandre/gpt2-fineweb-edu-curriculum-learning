@@ -1,14 +1,14 @@
 """Build the ordering study's data from FineWeb-Edu.
 
-Writes the training pool in each of the four orderings, and the validation split with its
-score quartiles.
+Writes the training pool in each of the four orders, and the held-out validation split with its
+score buckets and their token counts.
 
 Example: python -m scripts.prepare_data --out data/ordering
 """
 
 import argparse
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import numpy as np
@@ -33,14 +33,13 @@ STREAM_BUFFER = 10_000
 
 def build_study(
     rows: Iterable[dict],
-    encode,
-    out: Path | str,
+    encode: Callable[[str], np.ndarray],
+    out: Path,
     pool_tokens: int,
     val_tokens: int,
     seed: int,
 ) -> None:
-    """Write each arm's token shard and the validation shard with its score buckets."""
-    out = Path(out)
+    """Write each arm's token shard, and the validation shard with its score buckets."""
     pool, validation = split_pool_and_validation(rows, encode, pool_tokens, val_tokens)
     scores = np.array([doc.score for doc in pool])
     lengths = np.array([len(doc.tokens) for doc in pool])
@@ -58,8 +57,8 @@ def build_study(
 
 def main() -> None:
     """Stream FineWeb-Edu and build the study's data."""
-    parser = argparse.ArgumentParser(description=__doc__)
     cfg = TrainConfig()
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=Path("data/ordering"))
     parser.add_argument("--pool-tokens", type=int, default=cfg.max_steps * cfg.total_batch_size)
     parser.add_argument("--val-tokens", type=int, default=VAL_TOKENS)

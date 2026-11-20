@@ -16,7 +16,6 @@ class CausalSelfAttention(nn.Module):
         assert config.n_embd % config.n_head == 0, "embedding size must split evenly into heads"
         self.attn = nn.Linear(config.n_embd, 3 * config.n_embd)
         self.proj = nn.Linear(config.n_embd, config.n_embd)
-        self.proj.WEIGHT_SCALE_INIT = 1  # ty: ignore[invalid-assignment]
         self.n_head = config.n_head
         self.n_embd = config.n_embd
 

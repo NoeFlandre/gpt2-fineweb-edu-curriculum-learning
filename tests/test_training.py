@@ -21,6 +21,10 @@ BUCKET_KEYS = {
 }
 
 
+def encode_bytes(text):
+    return list(text.encode())
+
+
 def make_data_root(root, arm="shuffle"):
     save_shard(root / "arms" / arm, "train", 0, (np.arange(2000) % 2000).astype(np.uint16))
     save_shard(root / "validation", "val", 0, (np.arange(400) % 2000).astype(np.uint16))
@@ -121,7 +125,7 @@ def test_train_records_curves_at_every_evaluation_and_a_final_model(tmp_path):
     root = make_data_root(tmp_path / "data")
     out = tmp_path / "run"
 
-    summary = train(small_cfg(), "shuffle", TINY, root, out, device="cpu")
+    summary = train(small_cfg(), "shuffle", TINY, root, out, device="cpu", encode=encode_bytes)
 
     records = read_records(out)
     assert [r["step"] for r in records if "train_loss" in r] == [0, 1, 2, 3]
@@ -134,7 +138,7 @@ def test_every_evaluation_records_the_overall_and_the_four_score_bucket_losses(t
     root = make_data_root(tmp_path / "data")
     out = tmp_path / "run"
 
-    train(small_cfg(), "shuffle", TINY, root, out, device="cpu")
+    train(small_cfg(), "shuffle", TINY, root, out, device="cpu", encode=encode_bytes)
 
     evaluation = next(r for r in read_records(out) if "val_loss" in r)
     assert set(evaluation) >= BUCKET_KEYS
@@ -152,8 +156,8 @@ def test_benchmark_accuracies_are_recorded_under_their_names(tmp_path):
         root,
         out,
         device="cpu",
+        encode=encode_bytes,
         benchmarks=examples,
-        encode=lambda text: list(text.encode()),
     )
 
     final = next(r for r in reversed(read_records(out)) if "piqa_acc" in r)
@@ -161,20 +165,21 @@ def test_benchmark_accuracies_are_recorded_under_their_names(tmp_path):
     assert 0.0 <= summary["piqa_acc"] <= 1.0
 
 
-def test_benchmarks_need_an_encoder(tmp_path):
-    root = make_data_root(tmp_path / "data")
-    examples = {"piqa": [{"ctx": "ab", "endings": ["cd", "ef"], "label": 0}]}
-
-    with pytest.raises(ValueError, match="encode is required"):
-        train(small_cfg(), "shuffle", TINY, root, tmp_path / "run", "cpu", benchmarks=examples)
-
-
 def test_train_forwards_every_metric_record_to_the_tracker(tmp_path):
     root = make_data_root(tmp_path / "data")
     tracker = RecordingTracker()
     out = tmp_path / "run"
 
-    train(small_cfg(), "shuffle", TINY, root, out, device="cpu", tracker=tracker)
+    train(
+        small_cfg(),
+        "shuffle",
+        TINY,
+        root,
+        out,
+        device="cpu",
+        encode=encode_bytes,
+        tracker=tracker,
+    )
 
     assert len(tracker.logged) == len(read_records(out))
 
@@ -182,7 +187,9 @@ def test_train_forwards_every_metric_record_to_the_tracker(tmp_path):
 def test_train_uses_the_requested_arm_directory(tmp_path):
     root = make_data_root(tmp_path / "data", arm="cooldown")
 
-    summary = train(small_cfg(), "cooldown", TINY, root, tmp_path / "run", device="cpu")
+    summary = train(
+        small_cfg(), "cooldown", TINY, root, tmp_path / "run", device="cpu", encode=encode_bytes
+    )
 
     assert summary["steps"] == 4
 
@@ -193,10 +200,19 @@ def test_an_interrupted_run_resumes_from_its_last_checkpoint(tmp_path):
     cfg = small_cfg(eval_every=10)
 
     with pytest.raises(RuntimeError, match="crash"):
-        train(cfg, "shuffle", TINY, root, out, device="cpu", tracker=CrashingTracker(2))
+        train(
+            cfg,
+            "shuffle",
+            TINY,
+            root,
+            out,
+            device="cpu",
+            encode=encode_bytes,
+            tracker=CrashingTracker(2),
+        )
     assert (out / "checkpoint.pt").exists()
 
-    summary = train(cfg, "shuffle", TINY, root, out, device="cpu")
+    summary = train(cfg, "shuffle", TINY, root, out, device="cpu", encode=encode_bytes)
 
     assert [r["step"] for r in read_records(out) if "train_loss" in r] == [0, 1, 2, 3]
     assert summary["steps"] == 4
@@ -208,10 +224,21 @@ def test_resume_refuses_a_checkpoint_from_another_configuration(tmp_path):
     cfg = small_cfg(eval_every=10)
     out = tmp_path / "run"
     with pytest.raises(RuntimeError, match="crash"):
-        train(cfg, "shuffle", TINY, root, out, device="cpu", tracker=CrashingTracker(2))
+        train(
+            cfg,
+            "shuffle",
+            TINY,
+            root,
+            out,
+            device="cpu",
+            encode=encode_bytes,
+            tracker=CrashingTracker(2),
+        )
 
     with pytest.raises(ValueError, match="another run"):
-        train(replace(cfg, max_lr=1e-3), "shuffle", TINY, root, out, device="cpu")
+        train(
+            replace(cfg, max_lr=1e-3), "shuffle", TINY, root, out, device="cpu", encode=encode_bytes
+        )
 
 
 def test_on_checkpoint_is_called_at_each_publish_step(tmp_path):
@@ -225,7 +252,8 @@ def test_on_checkpoint_is_called_at_each_publish_step(tmp_path):
         root,
         tmp_path / "run",
         device="cpu",
-        on_checkpoint=lambda out, step: published.append(step),
+        encode=encode_bytes,
+        on_checkpoint=lambda _out, step: published.append(step),
     )
 
     assert published == [2, 4]
@@ -235,6 +263,6 @@ def test_losses_are_finite_at_every_evaluation(tmp_path):
     root = make_data_root(tmp_path / "data")
     out = tmp_path / "run"
 
-    train(small_cfg(), "shuffle", TINY, root, out, device="cpu")
+    train(small_cfg(), "shuffle", TINY, root, out, device="cpu", encode=encode_bytes)
 
     assert all(math.isfinite(r["val_loss"]) for r in read_records(out) if "val_loss" in r)
