@@ -15,7 +15,7 @@ class TrainConfig:
 
     total_tokens: int = 900_000_000
     total_batch_size: int = 524_288
-    micro_batch_size: int = 8
+    micro_batch_size: int = 16
     sequence_length: int = 1024
     max_lr: float = 6e-4
     min_lr_ratio: float = 0.1

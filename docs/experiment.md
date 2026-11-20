@@ -44,7 +44,7 @@ tokens per parameter.
 | Setting | Value |
 |---|---|
 | Tokens per arm | 900M (1,716 steps of 524,288 tokens) |
-| Micro-batch x sequence | 8 x 1024, with 64 accumulation steps (16 x 1024 runs out of memory on this GPU) |
+| Micro-batch x sequence | 16 x 1024, with 32 accumulation steps (about 7.3 GB of GPU memory; 32 x 1024 runs out of memory) |
 | Optimizer | AdamW, weight decay 0.1 on matrices |
 | Learning rate | Peak 6e-4, 18 warmup steps (about 1% of the run), cosine decay to 6e-5 |
 | Precision | bf16 autocast, `torch.compile` on the training forward |

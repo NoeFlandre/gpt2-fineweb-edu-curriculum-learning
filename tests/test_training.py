@@ -84,7 +84,7 @@ def test_the_study_has_1716_steps_of_524288_tokens_per_arm():
     assert cfg.total_tokens == 900_000_000
     assert cfg.max_steps == 1716
     assert cfg.max_steps * cfg.total_batch_size == 899_678_208
-    assert cfg.grad_accum_steps == 64
+    assert cfg.grad_accum_steps == 32
 
 
 def test_the_study_warms_up_over_about_one_percent_of_its_steps():
