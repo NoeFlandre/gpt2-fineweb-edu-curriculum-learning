@@ -2,6 +2,7 @@
 # Build the study's data, train the four orderings one after another, then plot and upload.
 # Run from the repository root.
 set -euo pipefail
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 if [ ! -f data/ordering/validation/val_000000.npy ]; then
   uv run python -m scripts.prepare_data --out data/ordering
