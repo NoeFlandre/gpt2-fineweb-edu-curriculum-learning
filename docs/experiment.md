@@ -19,18 +19,18 @@ model, optimizer, schedule and seed. They differ only in the order of the docume
 | `descending` | Documents sorted by score, highest first |
 | `cooldown` | The lowest-scoring documents that fill 80% of the tokens, shuffled; then the rest, shuffled |
 
-The cooldown split is taken by tokens, not documents, so the first stage holds 80% of the training
-tokens. Its final stage is shuffled rather than sorted, so the arm tests a two-stage cooldown
-rather than a gradual curriculum.
+The cooldown split is taken by tokens at a document boundary, so the first stage holds at most 80%
+of the training tokens, short by less than one document. Its final stage is shuffled rather than
+sorted, so the arm tests a two-stage cooldown rather than a gradual curriculum.
 
 Each document's score is the continuous `score` column of
 [FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu) (`sample-10BT`), read as
 published. Nothing is re-scored. The pool holds the documents whose rounded score is at least 3, that
 is `score >= 2.5`.
 
-Documents are joined with the `<|endoftext|>` token and cut into 1,024-token sequences. No document is
-split across the ordering. Each arm uses exactly 1,716 steps of 524,288 tokens, which is 899,678,208
-tokens; the last document of an arm may be cut at that boundary.
+Documents are joined with the `<|endoftext|>` token and cut into 1,024-token sequences. Each arm uses
+exactly 1,716 steps of 524,288 tokens, which is 899,678,208 tokens. Only the last document of an arm
+can be cut, at that boundary.
 
 ## Model
 
@@ -72,7 +72,7 @@ missing.
 - One seed per arm. Differences smaller than seed-to-seed noise cannot be resolved.
 - The validation buckets come from the same FineWeb-Edu stream as the pool, so they test
   generalization within that distribution, not to other web text.
-- The cooldown's boundary can split a document, and the last document of each arm is cut at the
-  token budget. Both affect every arm equally in token count.
+- Each arm's last document is cut at the token budget, so two arms can differ by part of one
+  document.
 - The score is a learned proxy for educational quality, so the buckets measure the classifier's
   judgement as much as quality.
