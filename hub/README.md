@@ -39,11 +39,24 @@ in which documents are seen.
 
 | | |
 |---|---|
-| Data | FineWeb-Edu `sample-10BT`, documents with an educational score of at least 2.5 |
+| Data | FineWeb-Edu `sample-10BT`, shuffled (see Data below) |
 | Budget | 1,716 steps of 524,288 tokens, which is 899.7M tokens per run |
 | Optimizer | AdamW (β = 0.9, 0.95), weight decay 0.1 on weight matrices |
 | Learning rate | Peak 6e-4, linear warmup over 18 steps, cosine decay to 6e-5 |
 | Other | Gradient clipping at 1.0, bf16 autocast, seed 42 |
+
+## Data
+
+The training pool is a shuffled slice of FineWeb-Edu `sample-10BT`, about 1.2 of its 14 files. Every document in the sample scores at least 2.5. The score mix, measured over the whole sample (9,672,101 documents, 9.97B GPT-2 tokens):
+
+| Score bucket | Share of documents | Share of tokens |
+|---|---|---|
+| [2.5, 3.0) | 57.2% | 56.0% |
+| [3.0, 3.5) | 29.5% | 30.0% |
+| [3.5, 4.0) | 11.2% | 11.9% |
+| [4.0, 5.0] | 2.1% | 2.1% |
+
+Each file's shares lie within 0.4 percentage points of this table. The pool's exact mix was not counted, because its scores are not stored when the data is built.
 
 ## Evaluation
 

@@ -2,7 +2,7 @@
 
 A 45M-parameter GPT-2, trained from scratch on [FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu). Four orders of the same 900M-token pool are compared, with documents ordered by their educational score.
 
-**Status:** the code and tests are in place; the experiment has not been run yet.
+**Status:** training. The four arms run one after another; the results appear as each arm finishes.
 
 **Results:** the live [Trackio dashboard](https://huggingface.co/spaces/NoeFlandre/gpt2-fineweb-edu-ordering-trackio) and the [model repository](https://huggingface.co/NoeFlandre/gpt2-fineweb-edu-ordering) with checkpoints and the model card. Both are published by the first run.
 
@@ -21,6 +21,19 @@ All arms share the same tokens, model, optimizer, schedule and seed. The loss is
 - **Budget:** 900M tokens per arm (1,716 steps of 524,288 tokens)
 - **Primary metric:** validation loss per FineWeb-Edu score bucket: [2.5, 3), [3, 3.5), [3.5, 4), [4, 5]
 - **Benchmarks:** HellaSwag, PIQA and ARC-Easy, normalized accuracy, every 50 steps
+
+## The pool
+
+The pool is a slice of FineWeb-Edu `sample-10BT`, shuffled through a 10,000-document buffer. Every document in the sample already scores at least 2.5, so the threshold removes none of them. Its score mix, measured over the whole sample (9,672,101 documents, 9.97B GPT-2 tokens):
+
+| Score bucket | Share of documents | Share of tokens |
+|---|---|---|
+| [2.5, 3.0) | 57.2% | 56.0% |
+| [3.0, 3.5) | 29.5% | 30.0% |
+| [3.5, 4.0) | 11.2% | 11.9% |
+| [4.0, 5.0] | 2.1% | 2.1% |
+
+The pool holds 871,635 documents, roughly 1.2 of the sample's 14 files. Each file's shares lie within 0.4 percentage points of the table. The pool's exact mix was not counted, because its scores are not stored when the data is built.
 
 Method and limitations: [docs/experiment.md](docs/experiment.md).
 
