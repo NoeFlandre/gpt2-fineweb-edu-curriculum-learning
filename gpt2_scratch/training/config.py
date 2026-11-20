@@ -1,4 +1,4 @@
-"""Training settings shared by every experimental arm."""
+"""Training settings shared by every ordering arm."""
 
 from dataclasses import dataclass
 
@@ -7,23 +7,22 @@ from dataclasses import dataclass
 class TrainConfig:
     """Hyperparameters of one training run.
 
-    The defaults follow the original run, except for the token budget and warmup.
+    The defaults are the ordering study: 900M tokens per arm, 524,288 tokens per optimizer step
+    (1716 steps), with warmup over about 1% of the steps.
     """
 
-    total_tokens: int = 100_000_000
+    total_tokens: int = 900_000_000
     total_batch_size: int = 524_288
     micro_batch_size: int = 8
     sequence_length: int = 1024
     max_lr: float = 6e-4
     min_lr_ratio: float = 0.1
-    warmup_steps: int = 10
+    warmup_steps: int = 18
     weight_decay: float = 0.1
     grad_clip: float = 1.0
-    val_every: int = 10
-    val_batches: int = 40
-    hellaswag_every: int = 10
-    checkpoint_every: int = 10
-    publish_every: int = 50
+    eval_every: int = 50
+    checkpoint_every: int = 50
+    publish_every: int = 100
     seed: int = 42
     use_compile: bool = True
 

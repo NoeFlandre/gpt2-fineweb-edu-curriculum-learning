@@ -1,6 +1,6 @@
-"""Train one arm, tracking it in Trackio and keeping its checkpoints on the Hugging Face model repo.
+"""Train one ordering arm, tracking curves in Trackio and keeping its checkpoints on the Hub.
 
-Example: python -m scripts.train --arm soft --out runs/soft
+Example: python -m scripts.train --arm cooldown --out runs/cooldown
 
 If the output folder has no checkpoint, the one published for this arm is downloaded first, so an
 interrupted run resumes from the Hub. Pass --no-hub to keep everything local.
@@ -12,9 +12,9 @@ from pathlib import Path
 
 import tiktoken
 import torch
-from gpt2_scratch.evaluation.hellaswag import load_examples
-from gpt2_scratch.experiment.arms import ARMS, get_arm
-from gpt2_scratch.model.config import GPT2Config
+from gpt2_scratch.evaluation.multiple_choice import load_examples
+from gpt2_scratch.experiment.arms import ORDERINGS
+from gpt2_scratch.model.config import STUDY_CONFIG
 from gpt2_scratch.publishing import MODEL_REPO, fetch_checkpoint, publish_checkpoint
 from gpt2_scratch.training.config import TrainConfig
 from gpt2_scratch.training.runner import train
@@ -26,16 +26,16 @@ from gpt2_scratch.training.tracking import (
 )
 from huggingface_hub import HfApi
 
-DEFAULT_HELLASWAG = Path("data/hellaswag/hellaswag_val.jsonl")
+BENCHMARKS = ("hellaswag", "piqa", "arc_easy")
 
 
 def parse_args() -> argparse.Namespace:
     """Read the command-line options."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--arm", required=True, choices=sorted(ARMS))
-    parser.add_argument("--data", type=Path, default=Path("data/arms"))
+    parser.add_argument("--arm", required=True, choices=ORDERINGS)
+    parser.add_argument("--data", type=Path, default=Path("data/ordering"))
+    parser.add_argument("--benchmarks", type=Path, default=Path("data/benchmarks"))
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--hellaswag", type=Path, default=DEFAULT_HELLASWAG)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--repo", default=MODEL_REPO, help="Model repo for checkpoints")
     parser.add_argument("--no-hub", action="store_true", help="keep checkpoints local only")
@@ -43,6 +43,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--space", default=TRACKIO_SPACE, help="Static dashboard Space")
     parser.add_argument("--bucket", default=TRACKIO_BUCKET, help="Bucket behind the dashboard")
     return parser.parse_args()
+
+
+def load_benchmarks(directory: Path) -> dict[str, list[dict]]:
+    """Every benchmark of the study, by name."""
+    return {name: load_examples(Path(directory) / f"{name}.jsonl") for name in BENCHMARKS}
 
 
 def _hub_checkpointer(repo: str, arm: str):
@@ -59,33 +64,32 @@ def _hub_checkpointer(repo: str, arm: str):
 
 
 def main() -> None:
-    """Train the arm, tracking it in Trackio, and print its summary."""
+    """Train the arm, tracking it in Trackio, and print its final evaluation."""
     args = parse_args()
     encoder = tiktoken.get_encoding("gpt2")
-    arm = get_arm(args.arm)
     cfg = TrainConfig()
-    model_config = GPT2Config(vocab_size=50304)
-    if not args.no_hub and fetch_checkpoint(args.repo, arm.name, args.out):
-        print(f"resuming {arm.name} from the checkpoint in {args.out}", flush=True)
+    model_config = STUDY_CONFIG
+    if not args.no_hub and fetch_checkpoint(args.repo, args.arm, args.out):
+        print(f"resuming {args.arm} from the checkpoint in {args.out}", flush=True)
     tracker = TrackioTracker.start(
         project=args.project,
-        name=arm.name,
-        config={"arm": arm.name, "train": asdict(cfg), "model": asdict(model_config)},
+        name=args.arm,
+        config={"arm": args.arm, "train": asdict(cfg), "model": asdict(model_config)},
         space_id=args.space,
         bucket_id=args.bucket,
     )
     try:
         summary = train(
             cfg,
-            arm,
+            args.arm,
             model_config,
             args.data,
             args.out,
             args.device,
-            hellaswag=load_examples(args.hellaswag),
+            benchmarks=load_benchmarks(args.benchmarks),
             encode=encoder.encode_ordinary,
             tracker=tracker,
-            on_checkpoint=None if args.no_hub else _hub_checkpointer(args.repo, arm.name),
+            on_checkpoint=None if args.no_hub else _hub_checkpointer(args.repo, args.arm),
         )
     finally:
         tracker.finish()

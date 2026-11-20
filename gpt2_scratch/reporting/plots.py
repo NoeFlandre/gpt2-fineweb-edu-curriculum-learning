@@ -1,7 +1,7 @@
-"""Figures comparing experimental arms."""
+"""Figures comparing the ordering arms: losses, score quartiles and benchmarks."""
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import matplotlib
@@ -9,7 +9,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-GPT2_BASELINE_ACCURACY = 0.294463
+BUCKET_KEYS = ["val_loss_25_30", "val_loss_30_35", "val_loss_35_40", "val_loss_40_50"]
+BENCHMARK_KEYS = ["hellaswag_acc", "piqa_acc", "arc_easy_acc"]
 
 
 def load_metrics(path: Path) -> list[dict]:
@@ -18,31 +19,36 @@ def load_metrics(path: Path) -> list[dict]:
 
 
 def plot_runs(runs: Mapping[str, Path], out_dir: Path) -> list[Path]:
-    """Plot training loss, validation loss and HellaSwag accuracy for each run.
+    """Plot the curves of every run.
 
     Args:
-        runs: Run name to the folder holding its metrics.jsonl.
+        runs: Arm name to the folder holding its metrics.jsonl.
         out_dir: Folder for the figures; created if missing.
 
     Returns:
         The written figure paths.
     """
     metrics = {name: load_metrics(Path(folder) / "metrics.jsonl") for name, folder in runs.items()}
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    written = [
-        _line_plot(metrics, "train_loss", "Training loss", "Loss", out_dir / "training_loss.png"),
-        _line_plot(metrics, "val_loss", "Validation loss", "Loss", out_dir / "validation_loss.png"),
-        _line_plot(
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    return [
+        _lines(metrics, ["train_loss"], "Training loss", "Loss", out / "training_loss.png"),
+        _lines(metrics, ["val_loss"], "Validation loss", "Loss", out / "validation_loss.png"),
+        _lines(
             metrics,
-            "hellaswag_acc",
-            "HellaSwag accuracy (normalized)",
+            BUCKET_KEYS,
+            "Validation loss by FineWeb-Edu score bucket",
+            "Loss",
+            out / "score_buckets.png",
+        ),
+        _lines(
+            metrics,
+            BENCHMARK_KEYS,
+            "Benchmark accuracy (normalized)",
             "Accuracy",
-            out_dir / "hellaswag.png",
-            baseline=GPT2_BASELINE_ACCURACY,
+            out / "benchmarks.png",
         ),
     ]
-    return written
 
 
 def _series(records: list[dict], key: str) -> tuple[list[int], list[float]]:
@@ -50,19 +56,18 @@ def _series(records: list[dict], key: str) -> tuple[list[int], list[float]]:
     return [step for step, _ in points], [value for _, value in points]
 
 
-def _line_plot(
-    metrics: dict,
-    key: str,
+def _lines(
+    metrics: Mapping[str, list[dict]],
+    keys: Sequence[str],
     title: str,
     ylabel: str,
     path: Path,
-    baseline: float | None = None,
 ) -> Path:
     figure, axis = plt.subplots(figsize=(10, 5))
     for name, records in metrics.items():
-        axis.plot(*_series(records, key), marker="o", label=name)
-    if baseline is not None:
-        axis.axhline(baseline, color="gray", linestyle="--", label="GPT-2 124M")
+        for key in keys:
+            label = name if len(keys) == 1 else f"{name} {key}"
+            axis.plot(*_series(records, key), marker="o", label=label)
     axis.set_title(title)
     axis.set_xlabel("Step")
     axis.set_ylabel(ylabel)

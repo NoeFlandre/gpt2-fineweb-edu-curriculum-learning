@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# Build the data, train the arms, then plot them. Run from the repository root.
-# The hard arm is held back for now; add it to the list to train it.
+# Build the study's data, train the four orderings one after another, then plot and upload.
+# Run from the repository root.
 set -euo pipefail
 
-if [ ! -f data/arms/raw/train_000000.npy ]; then
-  uv run python -m scripts.prepare_data --out data/arms
+if [ ! -f data/ordering/validation/val_000000.npy ]; then
+  uv run python -m scripts.prepare_data --out data/ordering
 fi
-for arm in uniform soft; do
-  uv run python -m scripts.train --arm "$arm" --data data/arms --out "runs/$arm"
+if [ ! -f data/benchmarks/piqa.jsonl ]; then
+  uv run python -m scripts.prepare_benchmarks --out data/benchmarks
+fi
+for arm in shuffle ascending descending cooldown; do
+  uv run python -m scripts.train --arm "$arm" --data data/ordering --benchmarks data/benchmarks --out "runs/$arm"
 done
 uv run python -m scripts.report --runs runs --out runs/figures
 uv run python -m scripts.upload

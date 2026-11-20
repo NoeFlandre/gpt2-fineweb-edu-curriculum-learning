@@ -1,64 +1,78 @@
-# Experiment: soft weighting versus hard filtering
+# Experiment: ordering FineWeb-Edu by its classifier score
 
 ## Question
 
-FineWeb-Edu keeps documents whose classifier score is 3 or higher and discards the rest. This is a hard filter: a document either counts fully or not at all. Does a soft alternative do better? Here, every document counts in proportion to its score.
+Holding the corpus and the token budget fixed, does the order in which a small language model sees
+its documents change what it learns? Four orders of the same pool are compared: shuffled,
+ascending score, descending score, and a two-stage cooldown that ends on the highest-scoring
+documents.
 
 ## Arms
 
-All three arms train the same GPT-2 (124M) for the same number of tokens, with the same seed, optimizer and schedule. They differ only in which documents they see and how much each token counts.
+All four arms train on the same pool of documents, for the same number of tokens, with the same
+model, optimizer, schedule and seed. They differ only in the order of the documents.
 
-| Arm | Documents | Loss weight per token |
-|---|---|---|
-| `uniform` | All FineWeb documents | 1 |
-| `hard` | FineWeb-Edu documents (score 3 to 5) | 1 |
-| `soft` | The same FineWeb documents as `uniform` | score / 5 |
+| Arm | Order |
+|---|---|
+| `shuffle` | A random order of all documents |
+| `ascending` | Documents sorted by score, lowest first |
+| `descending` | Documents sorted by score, highest first |
+| `cooldown` | The lowest-scoring documents that fill 80% of the tokens, shuffled; then the rest, shuffled |
 
-`uniform` and `soft` see identical text in identical order, so their difference is the weighting alone. `hard` compares filtering with the other two.
+The cooldown split is taken by tokens, not documents, so the first stage holds 80% of the training
+tokens. Its final stage is shuffled rather than sorted, so the arm tests a two-stage cooldown
+rather than a gradual curriculum.
 
-Each document's score comes from the [FineWeb-Edu classifier](https://huggingface.co/HuggingFaceFW/fineweb-edu-classifier), rounded to an integer from 0 to 5, applied to the first 512 tokens of the document.
+Each document's score is the continuous `score` column of
+[FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu) (`sample-10BT`), read as
+published. Nothing is re-scored. The pool holds the documents whose rounded score is at least 3, that
+is `score >= 2.5`.
+
+Documents are joined with the `<|endoftext|>` token and cut into 1,024-token sequences. No document is
+split across the ordering. Each arm uses exactly 1,716 steps of 524,288 tokens, which is 899,678,208
+tokens; the last document of an arm may be cut at that boundary.
+
+## Model
+
+GPT-2 with 6 layers, width 512, 8 heads and a 1,024-token block, with tied input and output
+embeddings. It has about 45.2M parameters, 18.9M of them outside the embeddings. This is about 20
+tokens per parameter.
 
 ## Training setup
 
 | Setting | Value |
 |---|---|
-| Tokens per arm | 100M (190 optimizer steps of 524,288 tokens) |
+| Tokens per arm | 900M (1,716 steps of 524,288 tokens) |
 | Micro-batch x sequence | 8 x 1024, with 64 accumulation steps (16 x 1024 runs out of memory on this GPU) |
-| Optimizer | AdamW, betas (0.9, 0.95), weight decay 0.1 on matrices |
-| Learning rate | Peak 6e-4, 10 warmup steps, cosine decay to 6e-5 |
+| Optimizer | AdamW, weight decay 0.1 on matrices |
+| Learning rate | Peak 6e-4, 18 warmup steps (about 1% of the run), cosine decay to 6e-5 |
 | Precision | bf16 autocast, `torch.compile` on the training forward |
 | Seed | 42 |
-| Validation | 40 batches of 16 from held-out FineWeb documents, unweighted, every 10 steps and after the last update |
-| Benchmark | HellaSwag, full validation set (10,042 examples), normalized accuracy, every 10 steps and after the last update |
-| Checkpoints | Every 10 steps locally, and every 50 steps to the model repo (`runs/<arm>/checkpoint.pt`). An interrupted run resumes from its last checkpoint and reads the same data, fetching it from the repo when missing |
 
-The benchmark is a curve, not a single score: each point is the normalized accuracy of the model
-after that many optimizer steps. As in the original repository, an example is scored by the ending
-whose average per-token loss is lowest, under bf16 autocast.
+## Evaluation
 
-## Loss normalization
+Evaluated every 50 steps and after the last step, 36 points per arm.
 
-Within each micro-batch the weighted loss is the sum of `weight x loss` divided by the sum of weights. With unit weights this is the ordinary mean, so `uniform` and `hard` are unaffected. A micro-batch whose weights all vanish gives zero loss, not NaN.
+- **Primary metric: score-stratified validation loss.** Two million tokens held out from the pool,
+  split by score into four buckets: [2.5, 3.0), [3.0, 3.5), [3.5, 4.0) and [4.0, 5.0]. Each bucket's
+  loss is logged as `val_loss_25_30`, `val_loss_30_35`, `val_loss_35_40` and `val_loss_40_50`. The
+  overall loss is `val_loss`. Each bucket's token count is in `validation/buckets.json`.
+- **Benchmarks:** HellaSwag (full validation set, 10,042 examples), PIQA (validation, 1,838) and
+  ARC-Easy (test, 2,376), each scored by normalized accuracy. HellaSwag is scored as in the original
+  repository: the ending with the lowest average per-token loss is the prediction.
+
+## Checkpoints
+
+Saved locally every 50 steps, and published to the model repository every 100 steps. An interrupted
+run resumes from its last checkpoint on the same data, fetching it from the repository when it is
+missing.
 
 ## Limitations
 
 - One seed per arm. Differences smaller than seed-to-seed noise cannot be resolved.
-- 100M tokens is far below the 124M model's capacity, and HellaSwag is near chance at this scale. Expect small effects.
-- The `hard` arm uses the published FineWeb-Edu documents, which are not the same set of documents as the `raw` arm. Any difference between `hard` and the others mixes filtering with document choice.
-- The classifier is itself a learned proxy for educational quality.
-
-## Results
-
-Results are published with the runs once training finishes; see the [model repository](https://huggingface.co/NoeFlandre/GPT2-Fineweb-Edu-Experiments).
-
-## Data balance checks
-
-Measured on the shards used for the runs (per-document scores, from the classifier for `raw`):
-
-| Shard | Documents | Mean length (tokens) | Documents by score 0 / 1 / 2 / 3 / 4 / 5 |
-|---|---|---|---|
-| `raw/train` (uniform, soft) | 143,468 | 697 | 12% / 62% / 20% / 5% / 0.8% / 0% |
-| `raw/val` (validation) | 3,008 | 665 | 12% / 62% / 20% / 5% / 0.5% / 0% |
-| `edu/train` (hard) | 95,821 | 1,044 | 0% / 0% / 0% / 87% / 13% / 0.1% |
-
-The raw training and validation shards have matching score mixes. The `hard` arm uses a different document source and longer documents, so its comparison with `uniform` also reflects that difference. This is accepted for the current run.
+- The validation buckets come from the same FineWeb-Edu stream as the pool, so they test
+  generalization within that distribution, not to other web text.
+- The cooldown's boundary can split a document, and the last document of each arm is cut at the
+  token budget. Both affect every arm equally in token count.
+- The score is a learned proxy for educational quality, so the buckets measure the classifier's
+  judgement as much as quality.

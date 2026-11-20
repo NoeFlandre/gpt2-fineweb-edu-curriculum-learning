@@ -6,7 +6,7 @@ from pathlib import Path
 from huggingface_hub import CommitOperationAdd, hf_hub_download
 from huggingface_hub.utils import EntryNotFoundError
 
-MODEL_REPO = "NoeFlandre/GPT2-Fineweb-Edu-Experiments"
+MODEL_REPO = "NoeFlandre/gpt2-fineweb-edu-ordering"
 CHECKPOINT = "checkpoint.pt"
 METRICS = "metrics.jsonl"
 

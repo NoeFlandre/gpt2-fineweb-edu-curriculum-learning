@@ -1,51 +1,40 @@
-"""Experimental arms: which documents are trained on and how much each token counts."""
+"""Document orderings of the study: every arm trains on the same pool, in a different order."""
 
-from collections.abc import Callable
-from dataclasses import dataclass
+import numpy as np
 
-import torch
-
-MAX_SCORE = 5
+ORDERINGS = ("shuffle", "ascending", "descending", "cooldown")
+COOLDOWN_SHARE = 0.8
 
 
-def uniform_weight(scores: torch.Tensor) -> torch.Tensor:
-    """Every token counts the same."""
-    return torch.ones_like(scores, dtype=torch.float32)
+def arm_order(
+    name: str, scores: np.ndarray, lengths: np.ndarray, budget: int, seed: int
+) -> np.ndarray:
+    """Indices of the pool's documents in the order this arm trains on them.
 
-
-def soft_weight(scores: torch.Tensor) -> torch.Tensor:
-    """A token counts in proportion to its document's educational score."""
-    return scores.float() / MAX_SCORE
-
-
-@dataclass(frozen=True)
-class Arm:
-    """One experimental arm.
-
-    Attributes:
-        name: Identifier used in folder names and reports.
-        source: Shard folder to train on: "raw" (all FineWeb documents) or "edu" (FineWeb-Edu).
-        weight: Maps each target token's score to its loss weight.
+    Args:
+        name: One of ORDERINGS.
+        scores: Continuous educational score of each document.
+        lengths: Token count of each document.
+        budget: Tokens the arm trains on; the cooldown split is taken at a share of it.
+        seed: Seed for the random shuffles.
     """
+    if name not in ORDERINGS:
+        raise ValueError(f"unknown ordering {name!r}")
+    rng = np.random.default_rng(seed)
+    if name == "shuffle":
+        return rng.permutation(len(scores))
+    ascending = np.argsort(scores, kind="stable")
+    if name == "ascending":
+        return ascending
+    if name == "descending":
+        return ascending[::-1]
+    return _cooldown(ascending, lengths, budget, rng)
 
-    name: str
-    source: str
-    weight: Callable[[torch.Tensor], torch.Tensor]
 
-
-ARMS: dict[str, Arm] = {
-    "uniform": Arm("uniform", source="raw", weight=uniform_weight),
-    "hard": Arm("hard", source="edu", weight=uniform_weight),
-    "soft": Arm("soft", source="raw", weight=soft_weight),
-}
-
-
-def get_arm(name: str) -> Arm:
-    """Return the arm registered under name.
-
-    Raises:
-        ValueError: If no arm has that name.
-    """
-    if name not in ARMS:
-        raise ValueError(f"unknown arm {name!r}, expected one of {sorted(ARMS)}")
-    return ARMS[name]
+def _cooldown(
+    ascending: np.ndarray, lengths: np.ndarray, budget: int, rng: np.random.Generator
+) -> np.ndarray:
+    """Shuffle the lowest-scoring documents that fill 80% of the budget, then the rest."""
+    cumulative = np.cumsum(lengths[ascending])
+    split = int(np.searchsorted(cumulative, COOLDOWN_SHARE * budget, side="right"))
+    return np.concatenate([rng.permutation(ascending[:split]), rng.permutation(ascending[split:])])

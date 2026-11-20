@@ -1,63 +1,116 @@
 import numpy as np
 import pytest
-import tiktoken
 import torch
-from gpt2_scratch.data.build import build_arrays, take_documents
+from gpt2_scratch.data.corpus import (
+    Document,
+    arm_tokens,
+    bucket_ids,
+    collect_documents,
+    split_pool_and_validation,
+    token_scores,
+)
 from gpt2_scratch.data.loader import TokenLoader
 from gpt2_scratch.data.shards import list_shards, load_shard, save_shard
-from gpt2_scratch.data.tokenize import encode_document
 
-ENCODER = tiktoken.get_encoding("gpt2")
-
-
-def make_shard(directory, split, index, length, offset=0):
-    tokens = (offset + np.arange(length)).astype(np.uint16)
-    scores = (np.arange(length) % 6).astype(np.uint8)
-    save_shard(directory, split, index, tokens, scores)
+EOT = 50256
 
 
-def test_document_starts_with_the_end_of_text_token():
-    tokens = encode_document("Hello world", ENCODER)
-
-    assert tokens[0] == ENCODER.eot_token
-    assert tokens[1:].tolist() == ENCODER.encode_ordinary("Hello world")
+def encode(text):
+    return np.array([EOT, *[ord(char) % 200 for char in text]], dtype=np.uint16)
 
 
-def test_encoded_documents_are_uint16():
-    assert encode_document("Hello", ENCODER).dtype == np.uint16
+def row(text, int_score=3, score=3.1):
+    return {"text": text, "int_score": int_score, "score": score}
 
 
-def test_end_of_text_only_appears_at_the_start():
-    tokens = encode_document("<|endoftext|>", ENCODER)
+def test_collect_documents_keeps_rows_whose_integer_score_is_three_or_more():
+    rows = iter([row("keep", 3, 3.1), row("drop", 2, 2.4), row("also", 5, 4.8)])
 
-    assert tokens.tolist().count(ENCODER.eot_token) == 1
+    docs = collect_documents(rows, encode, budget=1000)
+
+    assert [doc.score for doc in docs] == [3.1, 4.8]
 
 
-def test_shard_round_trip_keeps_tokens_and_scores(tmp_path):
+def test_collect_documents_skips_rows_without_text():
+    rows = iter([row("   ", 3, 3.1), row("keep", 3, 3.2)])
+
+    docs = collect_documents(rows, encode, budget=1000)
+
+    assert [doc.score for doc in docs] == [3.2]
+
+
+def test_collect_documents_stops_once_the_budget_is_reached():
+    rows = iter([row("x" * 9, 3, 3.1), row("y" * 9, 3, 3.2), row("z" * 9, 3, 3.3)])
+
+    docs = collect_documents(rows, encode, budget=20)
+
+    assert len(docs) == 2
+    assert next(rows)["score"] == 3.3
+
+
+def test_documents_start_with_the_end_of_text_token():
+    docs = collect_documents(iter([row("hi", 3, 3.1)]), encode, budget=1)
+
+    assert docs[0].tokens[0] == EOT
+
+
+def test_split_keeps_validation_documents_out_of_the_pool():
+    rows = [row(f"doc{i}", 3, 3.0 + i / 100) for i in range(10)]
+
+    pool, validation = split_pool_and_validation(rows, encode, pool_tokens=20, val_tokens=20)
+
+    assert len(pool) == 4
+    assert len(validation) == 4
+    assert {doc.score for doc in pool}.isdisjoint({doc.score for doc in validation})
+
+
+def test_arm_tokens_are_exactly_the_budget_in_document_order():
+    docs = [
+        Document(np.array([EOT, 1, 2], dtype=np.uint16), 3.1),
+        Document(np.array([EOT, 3], dtype=np.uint16), 3.2),
+    ]
+
+    tokens = arm_tokens(docs, np.array([1, 0]), budget=4)
+
+    assert tokens.tolist() == [EOT, 3, EOT, 1]
+    assert tokens.dtype == np.uint16
+
+
+def test_token_scores_repeat_each_document_score_for_its_tokens():
+    docs = [
+        Document(np.array([EOT, 1], dtype=np.uint16), 3.5),
+        Document(np.array([EOT], dtype=np.uint16), 4.5),
+    ]
+
+    assert token_scores(docs).tolist() == [3.5, 3.5, 4.5]
+
+
+def test_score_buckets_follow_the_fixed_edges_from_2_5_to_5():
+    scores = np.array([2.5, 2.99, 3.0, 3.49, 3.5, 3.99, 4.0, 5.0], dtype=np.float32)
+
+    buckets = bucket_ids(scores)
+
+    assert buckets.tolist() == [0, 0, 1, 1, 2, 2, 3, 3]
+    assert buckets.dtype == np.uint8
+
+
+def test_shards_round_trip_tokens(tmp_path):
     tokens = np.arange(10, dtype=np.uint16)
-    scores = (np.arange(10) % 6).astype(np.uint8)
-    save_shard(tmp_path, "train", 0, tokens, scores)
+    save_shard(tmp_path, "train", 0, tokens)
 
-    loaded_tokens, loaded_scores = load_shard(list_shards(tmp_path, "train")[0])
+    loaded = load_shard(list_shards(tmp_path, "train")[0])
 
-    np.testing.assert_array_equal(loaded_tokens, tokens)
-    np.testing.assert_array_equal(loaded_scores, scores)
+    np.testing.assert_array_equal(loaded, tokens)
 
 
-def test_list_shards_is_sorted_and_ignores_score_files(tmp_path):
-    make_shard(tmp_path, "train", 1, 4)
-    make_shard(tmp_path, "train", 0, 4)
+def test_list_shards_is_sorted_and_only_returns_the_requested_split(tmp_path):
+    save_shard(tmp_path, "train", 1, np.zeros(4, np.uint16))
+    save_shard(tmp_path, "train", 0, np.zeros(4, np.uint16))
+    save_shard(tmp_path, "val", 0, np.zeros(4, np.uint16))
 
     names = [path.name for path in list_shards(tmp_path, "train")]
 
     assert names == ["train_000000.npy", "train_000001.npy"]
-
-
-def test_list_shards_only_returns_the_requested_split(tmp_path):
-    make_shard(tmp_path, "train", 0, 4)
-    make_shard(tmp_path, "val", 0, 4)
-
-    assert [path.name for path in list_shards(tmp_path, "val")] == ["val_000000.npy"]
 
 
 def test_list_shards_fails_when_the_split_is_missing(tmp_path):
@@ -65,132 +118,40 @@ def test_list_shards_fails_when_the_split_is_missing(tmp_path):
         list_shards(tmp_path, "train")
 
 
-def test_save_shard_rejects_mismatched_lengths(tmp_path):
-    with pytest.raises(ValueError, match="same length"):
-        save_shard(tmp_path, "train", 0, np.zeros(3, np.uint16), np.zeros(2, np.uint8))
-
-
-def test_loader_batches_have_the_requested_shape(tmp_path):
-    make_shard(tmp_path, "train", 0, 200)
+def test_loader_yields_inputs_and_targets_shifted_by_one(tmp_path):
+    save_shard(tmp_path, "train", 0, np.arange(200, dtype=np.uint16))
     loader = TokenLoader(tmp_path, "train", batch_size=2, seq_len=8)
 
-    x, y, s = loader.next_batch()
+    x, y = loader.next_batch()
 
-    assert x.shape == y.shape == s.shape == (2, 8)
+    assert x.shape == y.shape == (2, 8)
     assert x.dtype == torch.long
-
-
-def test_targets_are_inputs_shifted_by_one(tmp_path):
-    make_shard(tmp_path, "train", 0, 200)
-    loader = TokenLoader(tmp_path, "train", batch_size=2, seq_len=8)
-
-    x, y, _ = loader.next_batch()
-
-    assert x[0, 0].item() == 0
-    assert y[0, 0].item() == 1
     assert torch.equal(x[0, 1:], y[0, :-1])
 
 
-def test_scores_are_aligned_with_the_targets(tmp_path):
-    make_shard(tmp_path, "train", 0, 200)
-    loader = TokenLoader(tmp_path, "train", batch_size=2, seq_len=8)
-
-    _, y, s = loader.next_batch()
-
-    expected = torch.from_numpy((np.arange(1, 17) % 6).astype(np.int64)).view(2, 8)
-    assert torch.equal(s, expected)
-    assert y[0, 0].item() == 1
-
-
-def test_consecutive_batches_continue_the_stream(tmp_path):
-    make_shard(tmp_path, "train", 0, 200)
-    loader = TokenLoader(tmp_path, "train", batch_size=2, seq_len=8)
-
-    loader.next_batch()
-    x, _, _ = loader.next_batch()
-
-    assert x[0, 0].item() == 16
-
-
 def test_loader_moves_to_the_next_shard_then_wraps_around(tmp_path):
-    make_shard(tmp_path, "train", 0, 20)
-    make_shard(tmp_path, "train", 1, 20, offset=100)
+    save_shard(tmp_path, "train", 0, np.arange(20, dtype=np.uint16))
+    save_shard(tmp_path, "train", 1, np.arange(100, 120, dtype=np.uint16))
     loader = TokenLoader(tmp_path, "train", batch_size=2, seq_len=8)
-
     loader.next_batch()
-    x_second_shard, _, _ = loader.next_batch()
-    assert x_second_shard[0, 0].item() == 100
+
+    x, _ = loader.next_batch()
+    assert x[0, 0].item() == 100
 
     loader.reset()
-    x_again, _, _ = loader.next_batch()
-    assert x_again[0, 0].item() == 0
+    x, _ = loader.next_batch()
+    assert x[0, 0].item() == 0
 
 
-def test_take_documents_stops_once_the_budget_is_reached():
-    texts = ["a" * 10, "b" * 10, "c" * 10, "d" * 10]
+def test_loader_state_lets_a_restored_loader_continue_the_same_stream(tmp_path):
+    save_shard(tmp_path, "train", 0, np.arange(200, dtype=np.uint16))
+    loader = TokenLoader(tmp_path, "train", batch_size=2, seq_len=8)
+    loader.next_batch()
+    saved = loader.state()
+    expected, _ = loader.next_batch()
 
-    token_arrays, kept_texts = take_documents(iter(texts), 15, lambda text: list(text.encode()))
+    restored = TokenLoader(tmp_path, "train", batch_size=2, seq_len=8)
+    restored.restore(saved)
+    actual, _ = restored.next_batch()
 
-    assert kept_texts == texts[:2]
-    assert len(token_arrays) == 2
-
-
-def test_build_arrays_repeats_each_document_score_per_token():
-    docs = [np.array([5, 6, 7], dtype=np.uint16), np.array([8], dtype=np.uint16)]
-
-    tokens, scores = build_arrays(docs, [4, 1])
-
-    assert tokens.tolist() == [5, 6, 7, 8]
-    assert scores.tolist() == [4, 4, 4, 1]
-
-
-def test_build_arrays_trims_to_the_token_budget():
-    docs = [np.arange(5, dtype=np.uint16), np.arange(5, dtype=np.uint16)]
-
-    tokens, scores = build_arrays(docs, [2, 3], max_tokens=7)
-
-    assert len(tokens) == len(scores) == 7
-    assert scores.tolist() == [2, 2, 2, 2, 2, 3, 3]
-
-
-def test_take_documents_keeps_everything_when_the_stream_runs_out():
-    texts = ["abc", "de"]
-
-    token_arrays, kept_texts = take_documents(iter(texts), 1_000, lambda text: list(text.encode()))
-
-    assert kept_texts == texts
-    assert len(token_arrays) == 2
-
-
-def test_take_documents_keeps_one_document_for_a_tiny_budget():
-    token_arrays, kept_texts = take_documents(
-        iter(["abc", "def"]), 1, lambda text: list(text.encode())
-    )
-
-    assert kept_texts == ["abc"]
-
-
-def test_take_documents_stops_exactly_when_the_budget_is_met():
-    texts = ["aaaaaaaaaa", "bbbbbbbbbb", "cccccccccc"]
-
-    _, kept_texts = take_documents(iter(texts), 10, lambda text: list(text.encode()))
-
-    assert kept_texts == texts[:1]
-
-
-def test_take_documents_returns_uint16_token_arrays():
-    token_arrays, _ = take_documents(iter(["ab"]), 10, lambda text: [1, 2, 300])
-
-    assert token_arrays[0].dtype == np.uint16
-    assert token_arrays[0].tolist() == [1, 2, 300]
-
-
-def test_build_arrays_returns_uint8_scores():
-    _, scores = build_arrays([np.array([1, 2], dtype=np.uint16)], [5])
-
-    assert scores.dtype == np.uint8
-
-
-def test_build_arrays_rejects_mismatched_documents_and_scores():
-    with pytest.raises(ValueError):
-        build_arrays([np.array([1], dtype=np.uint16)], [1, 2])
+    assert torch.equal(actual, expected)

@@ -1,5 +1,5 @@
 site_name: GPT-2 from scratch on FineWeb-Edu
-site_description: Soft quality weighting versus hard filtering for GPT-2 pretraining.
+site_description: Ordering a fixed FineWeb-Edu corpus by its classifier score, for GPT-2 pretraining.
 theme:
   name: material
   features:

@@ -1,97 +1,82 @@
-"""Build the token shards the arms train on.
+"""Build the ordering study's data from FineWeb-Edu.
 
-- raw/train: FineWeb documents, each scored by the FineWeb-Edu classifier.
-- raw/val: validation documents taken after the training documents.
-- edu/train: FineWeb-Edu documents with their published scores.
+Writes the training pool in each of the four orderings, and the validation split with its
+score quartiles.
 
-Example: python -m scripts.prepare_data --out data/arms
+Example: python -m scripts.prepare_data --out data/ordering
 """
 
 import argparse
-from collections.abc import Iterator
+import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Protocol
 
 import numpy as np
 import tiktoken
 from datasets import load_dataset
-from gpt2_scratch.data.build import build_arrays, take_documents
+from gpt2_scratch.data.corpus import (
+    SCORE_EDGES,
+    arm_tokens,
+    bucket_ids,
+    split_pool_and_validation,
+    token_scores,
+)
 from gpt2_scratch.data.shards import save_shard
 from gpt2_scratch.data.tokenize import encode_document
-from gpt2_scratch.experiment.scoring import EducationalScorer
+from gpt2_scratch.experiment.arms import ORDERINGS, arm_order
+from gpt2_scratch.training.config import TrainConfig
 
-SCORE_BATCH = 64
-
-
-class TextScorer(Protocol):
-    """Anything that maps texts to integer educational scores."""
-
-    def score(self, texts: list[str]) -> np.ndarray:
-        """Return one integer score per text."""
+EDU = "HuggingFaceFW/fineweb-edu"
+VAL_TOKENS = 2_000_000
+STREAM_BUFFER = 10_000
 
 
-FINEWEB = "HuggingFaceFW/fineweb"
-FINEWEB_EDU = "HuggingFaceFW/fineweb-edu"
-
-
-def parse_args() -> argparse.Namespace:
-    """Read the command-line options."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", type=Path, default=Path("data/arms"))
-    parser.add_argument("--train-tokens", type=int, default=100_000_000)
-    parser.add_argument("--val-tokens", type=int, default=2_000_000)
-    parser.add_argument("--device", default="cuda")
-    return parser.parse_args()
-
-
-def stream_rows(repo: str) -> Iterator[dict]:
-    """Yield the rows of the sample-10BT config of a dataset, without downloading it all."""
-    yield from load_dataset(repo, name="sample-10BT", split="train", streaming=True)
-
-
-def score_texts(scorer: TextScorer, texts: list[str]) -> np.ndarray:
-    """Classifier score of every text, computed in batches."""
-    batches = []
-    for start in range(0, len(texts), SCORE_BATCH):
-        batches.append(scorer.score(texts[start : start + SCORE_BATCH]))
-        if len(batches) % 200 == 0:
-            print(f"scored {start + SCORE_BATCH} of {len(texts)} documents", flush=True)
-    return np.concatenate(batches) if batches else np.zeros(0, dtype=np.uint8)
+def build_study(
+    rows: Iterable[dict],
+    encode,
+    out: Path | str,
+    pool_tokens: int,
+    val_tokens: int,
+    seed: int,
+) -> None:
+    """Write each arm's token shard and the validation shard with its score buckets."""
+    out = Path(out)
+    pool, validation = split_pool_and_validation(rows, encode, pool_tokens, val_tokens)
+    scores = np.array([doc.score for doc in pool])
+    lengths = np.array([len(doc.tokens) for doc in pool])
+    for arm in ORDERINGS:
+        order = arm_order(arm, scores, lengths, pool_tokens, seed)
+        save_shard(out / "arms" / arm, "train", 0, arm_tokens(pool, order, pool_tokens))
+    validation_tokens = arm_tokens(validation, np.arange(len(validation)), val_tokens)
+    per_token = token_scores(validation)[: len(validation_tokens)]
+    buckets = bucket_ids(per_token)
+    save_shard(out / "validation", "val", 0, validation_tokens)
+    np.save(out / "validation" / "val_buckets.npy", buckets)
+    report = {"edges": SCORE_EDGES.tolist(), "tokens": np.bincount(buckets, minlength=4).tolist()}
+    (out / "validation" / "buckets.json").write_text(json.dumps(report))
 
 
 def main() -> None:
-    """Build the raw and edu shards."""
-    args = parse_args()
-    encoder = tiktoken.get_encoding("gpt2")
-
-    def encode(text: str) -> np.ndarray:
-        """Encode one document with its end-of-text prefix."""
-        return encode_document(text, encoder)
-
-    scorer = EducationalScorer.from_pretrained(args.device)
-    raw = (row["text"] for row in stream_rows(FINEWEB))
-    print("building raw train shard", flush=True)
-    arrays, texts = take_documents(raw, args.train_tokens, encode)
-    tokens, scores = build_arrays(arrays, score_texts(scorer, texts).tolist(), args.train_tokens)
-    save_shard(args.out / "raw", "train", 0, tokens, scores)
-
-    print("building raw validation shard", flush=True)
-    arrays, texts = take_documents(raw, args.val_tokens, encode)
-    tokens, scores = build_arrays(arrays, score_texts(scorer, texts).tolist(), args.val_tokens)
-    save_shard(args.out / "raw", "val", 0, tokens, scores)
-
-    edu_scores: list[int] = []
-
-    def edu_texts() -> Iterator[str]:
-        """Yield FineWeb-Edu texts and remember their published scores."""
-        for row in stream_rows(FINEWEB_EDU):
-            edu_scores.append(row["int_score"])
-            yield row["text"]
-
-    print("building edu train shard", flush=True)
-    arrays, _ = take_documents(edu_texts(), args.train_tokens, encode)
-    tokens, scores = build_arrays(arrays, edu_scores[: len(arrays)], args.train_tokens)
-    save_shard(args.out / "edu", "train", 0, tokens, scores)
+    """Stream FineWeb-Edu and build the study's data."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    cfg = TrainConfig()
+    parser.add_argument("--out", type=Path, default=Path("data/ordering"))
+    parser.add_argument("--pool-tokens", type=int, default=cfg.max_steps * cfg.total_batch_size)
+    parser.add_argument("--val-tokens", type=int, default=VAL_TOKENS)
+    parser.add_argument("--seed", type=int, default=cfg.seed)
+    args = parser.parse_args()
+    tokenizer = tiktoken.get_encoding("gpt2")
+    rows = load_dataset(EDU, name="sample-10BT", split="train", streaming=True).shuffle(
+        seed=args.seed, buffer_size=STREAM_BUFFER
+    )
+    build_study(
+        rows,
+        lambda text: encode_document(text, tokenizer),
+        args.out,
+        args.pool_tokens,
+        args.val_tokens,
+        args.seed,
+    )
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Sequential batches of inputs, targets and target scores read from shards."""
+"""Sequential batches of inputs and targets read from token shards."""
 
 from pathlib import Path
 
@@ -38,20 +38,19 @@ class TokenLoader:
         self._open(state["shard_index"])
         self.position = state["position"]
 
-    def next_batch(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Return inputs, targets and the score of each target token."""
+    def next_batch(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return inputs and their next-token targets."""
         span = self.batch_size * self.seq_len
         if self.position + span + 1 > len(self.tokens):
             self._open((self.shard_index + 1) % len(self.shards))
         start = self.position
         end = start + span + 1
         tokens = torch.from_numpy(self.tokens[start:end].astype(np.int64))
-        scores = torch.from_numpy(self.scores[start + 1 : end].astype(np.int64))
         self.position = start + span
         shape = (self.batch_size, self.seq_len)
-        return tokens[:-1].view(shape), tokens[1:].view(shape), scores.view(shape)
+        return tokens[:-1].view(shape), tokens[1:].view(shape)
 
     def _open(self, index: int) -> None:
         self.shard_index = index
-        self.tokens, self.scores = load_shard(self.shards[index])
+        self.tokens = load_shard(self.shards[index])
         self.position = 0

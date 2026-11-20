@@ -8,48 +8,41 @@ tags:
 - gpt2
 - from-scratch
 - fineweb-edu
-- data-quality
+- curriculum
 ---
 
-# GPT-2 124M on FineWeb-Edu: uniform, hard and soft data weighting
+# GPT-2 (45M) on FineWeb-Edu: ordering by classifier score
 
-GPT-2 (124M) trained from scratch on 100M tokens per arm, comparing three ways of using the
-FineWeb-Edu quality score:
+A small GPT-2 (6 layers, width 512, about 45M parameters) trained from scratch on 900M tokens of
+FineWeb-Edu documents, in four orders of the same pool:
 
-| Arm | Documents | Loss weight per token |
-|---|---|---|
-| `uniform` | All FineWeb documents | 1 |
-| `hard` | FineWeb-Edu documents (score 3 to 5) | 1 |
-| `soft` | The same documents as `uniform` | score / 5 |
+| Arm | Order |
+|---|---|
+| `shuffle` | Random order |
+| `ascending` | Lowest score first |
+| `descending` | Highest score first |
+| `cooldown` | Lowest-scoring 80% of tokens shuffled, then the highest-scoring 20% shuffled |
 
-Status: `uniform` and `soft` are being trained; `hard` is pending.
+**Live results:** the [Trackio dashboard](https://huggingface.co/spaces/NoeFlandre/gpt2-fineweb-edu-ordering-trackio)
+shows the validation loss per FineWeb-Edu score bucket (the primary metric), the overall validation
+loss, and HellaSwag, PIQA and ARC-Easy accuracy, every 50 steps.
 
-**Live results:** the [Trackio dashboard](https://huggingface.co/spaces/NoeFlandre/GPT2-Fineweb-Edu-Experiments-trackio)
-shows validation loss and HellaSwag normalized accuracy as curves. Both are recorded every 10 steps
-and after the last update (190 steps per arm).
+Score buckets: [2.5, 3.0), [3.0, 3.5), [3.5, 4.0), [4.0, 5.0].
 
-HellaSwag is scored as in the original repository: the full validation set (10,042 examples), and an
-example counts as correct when its ending with the lowest average per-token loss is the labelled one.
+Full method: [docs/experiment.md](https://github.com/NoeFlandre/GPT2-Fineweb-Edu-Experiments/blob/main/docs/experiment.md).
 
 ## Files
 
 - `runs/<arm>/model.pt`: final weights
 - `runs/<arm>/config.json`: arm, training and model settings
-- `runs/<arm>/metrics.jsonl`: every training, validation and HellaSwag record
-- `runs/<arm>/checkpoint.pt`: latest checkpoint (weights, optimizer and data position), published every 50 steps
-- `data/arms/`: the tokenized shards for the raw and edu sources
+- `runs/<arm>/metrics.jsonl`: every training, validation and benchmark record
+- `runs/<arm>/checkpoint.pt`: latest checkpoint (weights, optimizer and data position), published every 100 steps
 
 ## Resuming
 
 ```bash
-uv run python -m scripts.train --arm soft --out runs/soft
+uv run python -m scripts.train --arm cooldown --out runs/cooldown
 ```
 
-If `runs/soft/checkpoint.pt` is missing locally, it is downloaded from this repository, and training
-continues from its step on the same data.
-
-## Source
-
-Code, method and experiment notes:
-[GPT2-Fineweb-Edu-Experiments](https://github.com/NoeFlandre/GPT2-Fineweb-Edu-Experiments), see
-`docs/experiment.md`.
+If `runs/cooldown/checkpoint.pt` is missing locally, it is downloaded from this repository and
+training continues on the same data.

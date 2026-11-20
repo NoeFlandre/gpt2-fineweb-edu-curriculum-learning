@@ -1,110 +1,117 @@
 import json
 import sys
-from pathlib import Path
 
 import numpy as np
-import tiktoken
-from gpt2_scratch.data.shards import load_shard
-from gpt2_scratch.data.tokenize import encode_document
+from gpt2_scratch.data.shards import list_shards, load_shard
 from gpt2_scratch.publishing import MODEL_REPO
 from gpt2_scratch.training.tracking import TRACKIO_BUCKET, TRACKIO_PROJECT, TRACKIO_SPACE
-from scripts import prepare_data, report, train, upload
+from scripts import prepare_benchmarks, prepare_data, train, upload
+
+EOT = 50256
 
 
-class FakeScorer:
-    def __init__(self):
-        self.calls = []
-
-    def score(self, texts):
-        self.calls.append(len(texts))
-        return np.full(len(texts), 4, dtype=np.uint8)
-
-    @classmethod
-    def from_pretrained(cls, device):
-        return cls()
+def encode(text):
+    return np.array([EOT, *[ord(char) % 200 for char in text]], dtype=np.uint16)
 
 
-def fake_load_dataset(repo, name, split, streaming):
-    assert name == "sample-10BT" and split == "train" and streaming
-    if repo == prepare_data.FINEWEB:
-        return [{"text": "raw document one"}, {"text": "raw document two"}] * 80
-    return [{"text": "edu document", "int_score": 3}] * 200
+def edu_row(index):
+    return {"text": f"document number {index}", "int_score": 3, "score": 3.0 + index / 100}
 
 
-def test_prepare_parse_args_defaults(monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["prepare_data"])
+def test_piqa_rows_become_two_ending_examples():
+    row = {"goal": "Cook rice", "sol1": "boil water", "sol2": "freeze it", "label": 0}
 
-    args = prepare_data.parse_args()
+    example = prepare_benchmarks.piqa_example(row)
 
-    assert args.train_tokens == 100_000_000
-    assert args.val_tokens == 2_000_000
-    assert args.out == Path("data/arms")
+    assert example == {"ctx": "Cook rice", "endings": ["boil water", "freeze it"], "label": 0}
 
 
-def test_score_texts_batches_and_joins_the_scores():
-    scorer = FakeScorer()
-    texts = ["x"] * 150
+def test_arc_rows_put_the_question_before_each_choice_and_find_the_answer_position():
+    row = {
+        "question": "What warms a room?",
+        "choices": {"text": ["ice", "heater", "snow"], "label": ["A", "B", "C"]},
+        "answerKey": "B",
+    }
 
-    scores = prepare_data.score_texts(scorer, texts)
+    example = prepare_benchmarks.arc_example(row)
 
-    assert scorer.calls == [64, 64, 22]
-    assert len(scores) == 150
+    assert example == {
+        "ctx": "Question: What warms a room?\nAnswer:",
+        "endings": ["ice", "heater", "snow"],
+        "label": 1,
+    }
 
 
-def test_score_texts_handles_no_documents():
-    assert prepare_data.score_texts(FakeScorer(), []).tolist() == []
+def test_write_examples_writes_one_json_object_per_line(tmp_path):
+    path = tmp_path / "piqa.jsonl"
+
+    prepare_benchmarks.write_examples(path, [{"ctx": "a", "endings": ["b"], "label": 0}])
+
+    assert json.loads(path.read_text()) == {"ctx": "a", "endings": ["b"], "label": 0}
 
 
-def test_prepare_main_writes_raw_and_edu_shards(monkeypatch, tmp_path):
-    monkeypatch.setattr(prepare_data, "load_dataset", fake_load_dataset)
-    monkeypatch.setattr(prepare_data, "EducationalScorer", FakeScorer)
+def test_build_study_writes_each_arm_and_the_validation_split(tmp_path):
+    rows = [edu_row(index) for index in range(40)]
+
+    prepare_data.build_study(rows, encode, tmp_path, pool_tokens=60, val_tokens=20, seed=1)
+
+    for arm in ("shuffle", "ascending", "descending", "cooldown"):
+        tokens = load_shard(list_shards(tmp_path / "arms" / arm, "train")[0])
+        assert len(tokens) == 60
+    validation = load_shard(list_shards(tmp_path / "validation", "val")[0])
+    buckets = np.load(tmp_path / "validation" / "val_buckets.npy")
+    assert len(validation) == len(buckets) == 20
+    report = json.loads((tmp_path / "validation" / "buckets.json").read_text())
+    assert report["edges"] == [3.0, 3.5, 4.0]
+    assert sum(report["tokens"]) == 20
+
+
+def test_train_main_wires_the_arm_benchmarks_and_tracker_into_the_runner(monkeypatch):
+    captured = {}
+
+    class FakeTracker:
+        @classmethod
+        def start(cls, project, name, config, space_id, bucket_id):
+            captured.update(project=project, name=name, space=space_id, bucket=bucket_id)
+            return cls()
+
+        def finish(self):
+            captured["finished"] = True
+
+    def fake_train(
+        cfg, arm, model_config, data, out, device, benchmarks, encode, tracker, on_checkpoint
+    ):
+        captured.update(arm=arm, out=out, benchmarks=sorted(benchmarks), device=device)
+        assert on_checkpoint is None
+        return {"steps": 0}
+
+    monkeypatch.setattr(train, "TrackioTracker", FakeTracker)
+    monkeypatch.setattr(train, "train", fake_train)
+    monkeypatch.setattr(train, "load_examples", lambda path: [{"label": 0}])
     monkeypatch.setattr(
         sys,
         "argv",
-        ["prepare_data", "--out", str(tmp_path), "--train-tokens", "300", "--val-tokens", "100"],
+        ["train", "--arm", "cooldown", "--out", "runs/cooldown", "--device", "cpu", "--no-hub"],
     )
 
-    prepare_data.main()
+    train.main()
 
-    raw_train_tokens, raw_train_scores = load_shard(tmp_path / "raw" / "train_000000.npy")
-    assert len(raw_train_tokens) == 300
-    assert set(raw_train_scores.tolist()) == {4}
-    assert (tmp_path / "raw" / "val_000000.npy").exists()
-    edu_tokens, edu_scores = load_shard(tmp_path / "edu" / "train_000000.npy")
-    assert len(edu_tokens) == 300
-    assert set(edu_scores.tolist()) == {3}
+    assert captured["arm"] == "cooldown"
+    assert captured["benchmarks"] == ["arc_easy", "hellaswag", "piqa"]
+    assert captured["project"] == TRACKIO_PROJECT
+    assert captured["finished"] is True
 
 
-def test_report_main_plots_every_run_folder(monkeypatch, tmp_path):
-    for name in ["soft", "uniform"]:
-        folder = tmp_path / "runs" / name
-        folder.mkdir(parents=True)
-        (folder / "metrics.jsonl").write_text(
-            json.dumps({"step": 0, "train_loss": 9.0})
-            + "\n"
-            + json.dumps({"step": 0, "val_loss": 9.5})
-            + "\n"
-        )
-    (tmp_path / "runs" / "figures").mkdir()
-    monkeypatch.setattr(
-        sys, "argv", ["report", "--runs", str(tmp_path / "runs"), "--out", str(tmp_path / "figs")]
-    )
-
-    report.main()
-
-    assert (tmp_path / "figs" / "training_loss.png").exists()
-
-
-def test_upload_main_uploads_the_runs_then_publishes_the_dashboard(monkeypatch, tmp_path):
+def test_upload_main_uploads_the_runs_and_card_then_publishes_the_dashboard(monkeypatch, tmp_path):
     uploads = []
     published = []
 
     class FakeApi:
         def upload_folder(self, **kwargs):
-            uploads.append(kwargs)
+            uploads.append(("folder", kwargs))
 
         def upload_file(self, **kwargs):
-            uploads.append(kwargs)
+            uploads.append(("file", kwargs))
 
     monkeypatch.setattr(upload, "HfApi", FakeApi)
     monkeypatch.setattr(
@@ -118,85 +125,7 @@ def test_upload_main_uploads_the_runs_then_publishes_the_dashboard(monkeypatch, 
 
     upload.main()
 
-    assert uploads[0]["path_in_repo"] == "runs"
-    assert uploads[0]["repo_id"] == MODEL_REPO
+    assert [kind for kind, _ in uploads] == ["folder", "file"]
+    assert uploads[0][1]["repo_id"] == MODEL_REPO
+    assert uploads[1][1]["path_in_repo"] == "README.md"
     assert published == [(TRACKIO_PROJECT, TRACKIO_SPACE, TRACKIO_BUCKET)]
-
-
-def test_train_parse_args_reads_the_arm_and_output(monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["train", "--arm", "soft", "--out", "runs/soft"])
-
-    args = train.parse_args()
-
-    assert args.arm == "soft"
-    assert args.out == Path("runs/soft")
-
-
-def test_train_main_wires_the_arm_and_tracker_into_the_runner(monkeypatch):
-    captured = {}
-
-    class FakeTracker:
-        @classmethod
-        def start(cls, project, name, config, space_id, bucket_id):
-            captured.update(project=project, name=name)
-            return cls()
-
-        def finish(self):
-            captured["finished"] = True
-
-    def fake_train(
-        cfg, arm, model_config, data, out, device, hellaswag, encode, tracker, on_checkpoint
-    ):
-        assert on_checkpoint is None
-        captured.update(arm=arm.name, out=out, examples=len(hellaswag), device=device)
-        assert isinstance(tracker, FakeTracker)
-        return {"steps": 0}
-
-    monkeypatch.setattr(train, "TrackioTracker", FakeTracker)
-    monkeypatch.setattr(train, "train", fake_train)
-    monkeypatch.setattr(train, "load_examples", lambda path: [{"label": 0}] * 3)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["train", "--arm", "hard", "--out", "runs/hard", "--device", "cpu", "--no-hub"],
-    )
-
-    train.main()
-
-    assert captured["arm"] == "hard"
-    assert captured["name"] == "hard"
-    assert captured["project"] == TRACKIO_PROJECT
-    assert captured["finished"] is True
-    assert captured["examples"] == 3
-
-
-def test_score_texts_reports_progress_every_two_hundred_batches(monkeypatch, capsys):
-    monkeypatch.setattr(prepare_data, "SCORE_BATCH", 1)
-
-    prepare_data.score_texts(FakeScorer(), ["x"] * 200)
-
-    assert "scored 200 of 200 documents" in capsys.readouterr().out
-
-
-def test_prepare_main_keeps_a_short_edu_stream_as_is(monkeypatch, tmp_path):
-    def short_edu(repo, name, split, streaming):
-        if repo == prepare_data.FINEWEB_EDU:
-            return [{"text": "edu document", "int_score": 3}] * 5
-        return fake_load_dataset(repo, name, split, streaming)
-
-    monkeypatch.setattr(prepare_data, "load_dataset", short_edu)
-    monkeypatch.setattr(prepare_data, "EducationalScorer", FakeScorer)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["prepare_data", "--out", str(tmp_path), "--train-tokens", "300", "--val-tokens", "100"],
-    )
-
-    prepare_data.main()
-
-    edu_tokens, edu_scores = load_shard(tmp_path / "edu" / "train_000000.npy")
-    assert len(edu_tokens) == len(edu_scores) == 5 * len(_edu_document_tokens())
-
-
-def _edu_document_tokens():
-    return encode_document("edu document", tiktoken.get_encoding("gpt2"))

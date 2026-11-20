@@ -9,7 +9,6 @@ import torch.nn.functional as F
 
 from gpt2_scratch.model.block import Block
 from gpt2_scratch.model.config import GPT2Config
-from gpt2_scratch.model.loss import weighted_mean
 
 
 class GPT2(nn.Module):
@@ -42,14 +41,12 @@ class GPT2(nn.Module):
         self,
         idx: torch.Tensor,
         targets: torch.Tensor | None = None,
-        weights: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Return logits and, when targets are given, the next-token loss.
+        """Return logits and, when targets are given, the mean next-token loss.
 
         Args:
             idx: Token ids, shape (batch, time).
             targets: Next-token ids, same shape as idx.
-            weights: Optional per-token loss weights, same shape as targets.
         """
         _, length = idx.size()
         assert length <= self.config.block_size, "sequence longer than the block size"
@@ -60,12 +57,8 @@ class GPT2(nn.Module):
         logits = self.lm_head(self.ln_f(x))
         if targets is None:
             return logits, None
-        per_token = F.cross_entropy(
-            logits.view(-1, logits.size(-1)), targets.reshape(-1), reduction="none"
-        )
-        if weights is None:
-            return logits, per_token.mean()
-        return logits, weighted_mean(per_token, weights.reshape(-1))
+        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.reshape(-1))
+        return logits, loss
 
     def configure_optimizers(
         self, weight_decay: float, learning_rate: float, device: str

@@ -7,9 +7,9 @@ static Space backed by a Hugging Face bucket, so the dashboard stays current dur
 import trackio
 from trackio import context_vars
 
-TRACKIO_PROJECT = "gpt2-fineweb-edu-experiments"
-TRACKIO_SPACE = "NoeFlandre/GPT2-Fineweb-Edu-Experiments-trackio"
-TRACKIO_BUCKET = "NoeFlandre/GPT2-Fineweb-Edu-Experiments-trackio-bucket"
+TRACKIO_PROJECT = "gpt2-fineweb-edu-ordering"
+TRACKIO_SPACE = "NoeFlandre/gpt2-fineweb-edu-ordering-trackio"
+TRACKIO_BUCKET = "NoeFlandre/gpt2-fineweb-edu-ordering-trackio-bucket"
 
 
 def publish(project: str, space_id: str, bucket_id: str) -> str:
