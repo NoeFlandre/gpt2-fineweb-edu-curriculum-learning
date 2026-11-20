@@ -6,45 +6,80 @@ library_name: pytorch
 pipeline_tag: text-generation
 tags:
 - gpt2
-- from-scratch
 - fineweb-edu
-- curriculum
+- data-ordering
+- pretraining
 ---
 
-# GPT-2 (45M) on FineWeb-Edu: ordering by classifier score
+# GPT-2 45M: does the order of documents matter?
 
-A small GPT-2 (6 layers, width 512, about 45M parameters) trained from scratch on 900M tokens of
-FineWeb-Edu documents, in four orders of the same pool:
+Four small GPT-2 models trained from scratch on the same 900M tokens of
+[FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu). They differ only in the order
+in which documents are seen.
 
-| Arm | Order |
+> **Status:** training in progress. The runs are trained one after another, and each run's files
+> appear here when it finishes.
+
+| Run | Order |
 |---|---|
-| `shuffle` | Random order |
-| `ascending` | Lowest score first |
-| `descending` | Highest score first |
-| `cooldown` | Lowest-scoring 80% of tokens shuffled, then the highest-scoring 20% shuffled |
+| `shuffle` | Random |
+| `ascending` | Lowest educational score first |
+| `descending` | Highest educational score first |
+| `cooldown` | Lowest-scoring 80% of tokens (shuffled), then the highest-scoring 20% (shuffled) |
 
-**Live results:** the [Trackio dashboard](https://huggingface.co/spaces/NoeFlandre/gpt2-fineweb-edu-ordering-trackio)
-shows the training loss at every step, and the validation loss per FineWeb-Edu score bucket (the
-primary metric), the overall validation loss, and HellaSwag, PIQA and ARC-Easy accuracy, every 50
-steps. The dashboard is synced every 50 steps and at the end of the run.
+## Model
 
-Score buckets: [2.5, 3.0), [3.0, 3.5), [3.5, 4.0), [4.0, 5.0].
+| | |
+|---|---|
+| Architecture | GPT-2: 6 layers, width 512, 8 heads, context 1024 |
+| Parameters | 45.2M (18.9M excluding embeddings) |
+| Vocabulary | GPT-2 BPE, 50,304 (padded); input and output embeddings tied |
 
-Full method: [docs/experiment.md](https://github.com/NoeFlandre/GPT2-Fineweb-Edu-Experiments/blob/main/docs/experiment.md).
+## Training
+
+| | |
+|---|---|
+| Data | FineWeb-Edu `sample-10BT`, documents with an educational score of at least 2.5 |
+| Budget | 1,716 steps of 524,288 tokens, which is 899.7M tokens per run |
+| Optimizer | AdamW (β = 0.9, 0.95), weight decay 0.1 on weight matrices |
+| Learning rate | Peak 6e-4, linear warmup over 18 steps, cosine decay to 6e-5 |
+| Other | Gradient clipping at 1.0, bf16 autocast, seed 42 |
+
+## Evaluation
+
+Every 50 steps, on:
+- **Validation loss** over 2M held-out tokens, reported overall and per score bucket:
+  [2.5, 3.0), [3.0, 3.5), [3.5, 4.0), [4.0, 5.0].
+- **Benchmarks** (normalized accuracy): HellaSwag, PIQA and ARC-Easy.
+
+Training curves are in the
+[Trackio dashboard](https://huggingface.co/spaces/NoeFlandre/gpt2-fineweb-edu-ordering-trackio).
 
 ## Files
 
-- `runs/<arm>/model.pt`: final weights
-- `runs/<arm>/config.json`: arm, training and model settings
-- `runs/<arm>/metrics.jsonl`: every training, validation and benchmark record
-- `runs/<arm>/checkpoint.pt`: latest checkpoint (weights, optimizer and data position), saved every 100 steps
+Each run has a folder `runs/<arm>/` containing:
+- `model.pt`: final weights.
+- `config.json`: training and model settings.
+- `metrics.jsonl`: every logged training, validation and benchmark record.
+- `checkpoint.pt`: latest training checkpoint (weights, optimizer state and data position).
 
-## Resuming
+## Usage
 
-```bash
-uv run python -m scripts.train --arm cooldown --out runs/cooldown
+```python
+import torch
+from gpt2_scratch.model.config import STUDY_CONFIG
+from gpt2_scratch.model.gpt2 import GPT2
+
+model = GPT2(STUDY_CONFIG)
+model.load_state_dict(torch.load("runs/shuffle/model.pt", map_location="cpu"))
+model.eval()
 ```
 
-Checkpoints are not kept on the machine: each one is uploaded here and then removed locally. When a
-run starts without a local checkpoint, the latest one is downloaded from this repository, and
-training continues on the same data.
+The model code is in [GPT2-Fineweb-Edu-Experiments](https://github.com/NoeFlandre/GPT2-Fineweb-Edu-Experiments).
+
+## Limitations
+
+- One seed per run, so small differences between runs may be noise.
+- The validation data comes from the same FineWeb-Edu stream as the training data.
+- Quality buckets use an educational classifier's scores, so they reflect that classifier's judgement.
+- This is a base pretraining model. It is not instruction-tuned.
