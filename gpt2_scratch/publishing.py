@@ -17,7 +17,10 @@ def remote_path(arm: str, name: str) -> str:
 
 
 def publish_checkpoint(api, repo: str, arm: str, out_dir: Path, step: int) -> None:
-    """Upload a run's latest checkpoint and metrics in one commit."""
+    """Upload a run's latest checkpoint and metrics in one commit, then remove the local checkpoint.
+
+    If the upload fails, the local checkpoint stays, so the next attempt can upload it.
+    """
     operations = [
         CommitOperationAdd(path_in_repo=remote_path(arm, name), path_or_fileobj=str(out_dir / name))
         for name in (CHECKPOINT, METRICS)
@@ -28,25 +31,31 @@ def publish_checkpoint(api, repo: str, arm: str, out_dir: Path, step: int) -> No
         operations=operations,
         commit_message=f"{arm}: checkpoint at step {step}",
     )
+    (out_dir / CHECKPOINT).unlink()
 
 
 def fetch_checkpoint(repo: str, arm: str, out_dir: Path) -> bool:
-    """Download a run's checkpoint when its local folder has none.
+    """Download a run's checkpoint and metrics when its local folder has no checkpoint.
+
+    The metrics come with the checkpoint, so the curves before the resume step are kept.
 
     Returns:
         True when the folder has a checkpoint afterwards, False when the Hub has none either.
     """
-    target = out_dir / CHECKPOINT
-    if target.exists():
+    if (out_dir / CHECKPOINT).exists():
         return True
     try:
-        downloaded = hf_hub_download(
-            repo, remote_path(arm, CHECKPOINT), repo_type="model", local_dir=out_dir
-        )
+        downloaded = {
+            name: hf_hub_download(
+                repo, remote_path(arm, name), repo_type="model", local_dir=out_dir
+            )
+            for name in (CHECKPOINT, METRICS)
+        }
     except EntryNotFoundError:
         _discard_download(out_dir)
         return False
-    Path(downloaded).replace(target)
+    for name, path in downloaded.items():
+        Path(path).replace(out_dir / name)
     _discard_download(out_dir)
     return True
 

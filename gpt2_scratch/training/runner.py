@@ -44,8 +44,8 @@ def train(
 
     Every eval_every steps, and after the last update, the validation loss (overall and per score
     bucket) and each benchmark's accuracy are recorded. Progress is checkpointed, so an interrupted
-    run resumes from its last checkpoint. Every publish_every steps, on_checkpoint is called with
-    the output folder and the step.
+    run resumes from its last checkpoint. After each checkpoint, on_checkpoint is called with the
+    output folder and the step; it is expected to upload the checkpoint and remove the local copy.
 
     Args:
         cfg: Training settings.
@@ -160,7 +160,7 @@ class _Run:
             temporary,
         )
         temporary.replace(path)
-        if self.on_checkpoint is not None and next_step % self.cfg.publish_every == 0:
+        if self.on_checkpoint is not None:
             self.on_checkpoint(self.out_dir, next_step)
 
     def finish(self) -> None:
@@ -205,4 +205,6 @@ class _Run:
         self.model.load_state_dict(saved["model"])
         self.optimizer.load_state_dict(saved["optimizer"])
         self.loader.restore(saved["loader"])
+        if self.on_checkpoint is not None:
+            path.unlink()  # with a Hub target, checkpoints are kept in the model repository only
         return saved["step"]

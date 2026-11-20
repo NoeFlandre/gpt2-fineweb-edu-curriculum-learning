@@ -32,6 +32,25 @@ def test_publish_checkpoint_uploads_the_checkpoint_and_metrics_in_one_commit(tmp
         "runs/uniform/metrics.jsonl",
     ]
     assert message == "uniform: checkpoint at step 50"
+    assert not (out / "checkpoint.pt").exists()
+    assert (out / "metrics.jsonl").exists()
+
+
+def test_a_failed_checkpoint_upload_keeps_the_local_copy_for_the_next_attempt(tmp_path):
+    out = tmp_path / "uniform"
+    out.mkdir()
+    (out / "checkpoint.pt").write_bytes(b"weights")
+    (out / "metrics.jsonl").write_text("{}\n")
+
+    class UnreachableApi:
+        def create_commit(self, **_kwargs):
+            message = "hub unreachable"
+            raise ConnectionError(message)
+
+    with pytest.raises(ConnectionError):
+        publishing.publish_checkpoint(UnreachableApi(), "user/repo", "uniform", out, step=50)
+
+    assert (out / "checkpoint.pt").read_bytes() == b"weights"
 
 
 def test_fetch_checkpoint_reports_none_when_the_hub_has_no_checkpoint(monkeypatch, tmp_path):
@@ -43,21 +62,43 @@ def test_fetch_checkpoint_reports_none_when_the_hub_has_no_checkpoint(monkeypatc
     assert publishing.fetch_checkpoint("user/repo", "uniform", tmp_path) is False
 
 
+def test_fetch_checkpoint_also_brings_back_the_metrics_so_the_curves_stay_whole(
+    monkeypatch, tmp_path
+):
+    out = tmp_path / "uniform"
+    fetched = []
+
+    def download(repo, filename, *, repo_type, local_dir):
+        assert (repo, repo_type) == ("user/repo", "model")
+        path = Path(local_dir) / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(filename.encode())
+        fetched.append(filename)
+        return str(path)
+
+    monkeypatch.setattr(publishing, "hf_hub_download", download)
+
+    assert publishing.fetch_checkpoint("user/repo", "uniform", out) is True
+    assert sorted(fetched) == ["runs/uniform/checkpoint.pt", "runs/uniform/metrics.jsonl"]
+    assert (out / "metrics.jsonl").read_bytes() == b"runs/uniform/metrics.jsonl"
+
+
 def test_fetch_checkpoint_moves_the_download_into_the_run_folder(monkeypatch, tmp_path):
     out = tmp_path / "uniform"
 
-    def download(_repo, filename, *, local_dir, **_kwargs):
-        assert filename == "runs/uniform/checkpoint.pt"
+    def download(repo, filename, *, repo_type, local_dir):
+        assert (repo, repo_type) == ("user/repo", "model")
         path = Path(local_dir) / filename
-        path.parent.mkdir(parents=True)
-        path.write_bytes(b"weights")
-        (Path(local_dir) / ".cache").mkdir()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"weights" if filename.endswith("checkpoint.pt") else b"curves")
+        (Path(local_dir) / ".cache").mkdir(exist_ok=True)
         return str(path)
 
     monkeypatch.setattr(publishing, "hf_hub_download", download)
 
     assert publishing.fetch_checkpoint("user/repo", "uniform", out) is True
     assert (out / "checkpoint.pt").read_bytes() == b"weights"
+    assert (out / "metrics.jsonl").read_bytes() == b"curves"
     assert not (out / "runs").exists()
     assert not (out / ".cache").exists()
 

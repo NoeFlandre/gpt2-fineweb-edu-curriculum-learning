@@ -41,7 +41,6 @@ def small_cfg(**overrides):
         "warmup_steps": 1,
         "eval_every": 2,
         "checkpoint_every": 2,
-        "publish_every": 2,
         "use_compile": False,
     }
     settings.update(overrides)
@@ -241,12 +240,12 @@ def test_resume_refuses_a_checkpoint_from_another_configuration(tmp_path):
         )
 
 
-def test_on_checkpoint_is_called_at_each_publish_step(tmp_path):
+def test_on_checkpoint_is_called_after_each_checkpoint(tmp_path):
     root = make_data_root(tmp_path / "data")
     published = []
 
     train(
-        small_cfg(checkpoint_every=1, publish_every=2),
+        small_cfg(checkpoint_every=2),
         "shuffle",
         TINY,
         root,
@@ -257,6 +256,54 @@ def test_on_checkpoint_is_called_at_each_publish_step(tmp_path):
     )
 
     assert published == [2, 4]
+
+
+class LocalCopyTracker:
+    """Records whether the local checkpoint exists each time a metric record is written."""
+
+    def __init__(self, path):
+        self.path = path
+        self.records = []
+
+    def log(self, metrics, step):
+        self.records.append((step, sorted(metrics), self.path.exists()))
+
+    def finish(self):
+        pass
+
+
+def test_a_checkpoint_resumed_with_a_hub_target_is_not_kept_locally(tmp_path):
+    root = make_data_root(tmp_path / "data")
+    out = tmp_path / "run"
+    cfg = small_cfg(eval_every=10)
+    with pytest.raises(RuntimeError, match="crash"):
+        train(
+            cfg,
+            "shuffle",
+            TINY,
+            root,
+            out,
+            device="cpu",
+            encode=encode_bytes,
+            tracker=CrashingTracker(2),
+        )
+    tracker = LocalCopyTracker(out / "checkpoint.pt")
+
+    train(
+        cfg,
+        "shuffle",
+        TINY,
+        root,
+        out,
+        device="cpu",
+        encode=encode_bytes,
+        tracker=tracker,
+        on_checkpoint=lambda _out, _step: None,
+    )
+
+    first_step, _, checkpoint_existed = tracker.records[0]
+    assert first_step == 2
+    assert checkpoint_existed is False
 
 
 def test_losses_are_finite_at_every_evaluation(tmp_path):

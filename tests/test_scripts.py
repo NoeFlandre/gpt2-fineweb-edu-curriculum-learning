@@ -152,13 +152,50 @@ def test_upload_main_uploads_the_runs_and_card_then_publishes_the_dashboard(monk
     assert published == [(TRACKIO_PROJECT, TRACKIO_SPACE, TRACKIO_BUCKET)]
 
 
-def piqa_archive(rows, labels):
-    """An in-memory copy of the PIQA zip that ybisk/piqa downloads, with a dev split."""
+def piqa_zip_bytes(rows, labels):
+    """The bytes of a PIQA zip shaped like the one ybisk/piqa downloads, with a dev split."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         archive.writestr("physicaliqa-train-dev/dev.jsonl", "\n".join(json.dumps(r) for r in rows))
         archive.writestr("physicaliqa-train-dev/dev-labels.lst", "\n".join(labels))
-    return zipfile.ZipFile(io.BytesIO(buffer.getvalue()))
+    return buffer.getvalue()
+
+
+def piqa_archive(rows, labels):
+    return zipfile.ZipFile(io.BytesIO(piqa_zip_bytes(rows, labels)))
+
+
+def test_download_piqa_opens_the_zip_from_the_location_ybisk_piqa_declares(monkeypatch):
+    opened = []
+    zip_bytes = piqa_zip_bytes([{"goal": "g", "sol1": "a", "sol2": "b"}], ["1"])
+
+    def fake_urlopen(url, timeout):
+        opened.append((url, timeout))
+        return io.BytesIO(zip_bytes)
+
+    monkeypatch.setattr(prepare_benchmarks.urllib.request, "urlopen", fake_urlopen)
+
+    archive = prepare_benchmarks.download_piqa()
+
+    assert opened == [(prepare_benchmarks.PIQA_ZIP, 120)]
+    assert archive.read("physicaliqa-train-dev/dev-labels.lst") == b"1"
+
+
+def test_main_starts_fresh_when_the_hub_has_no_checkpoint(monkeypatch, tmp_path, capsys):
+    hub = HubRecorder()
+    monkeypatch.setattr(train, "fetch_checkpoint", lambda *_args: False)
+    monkeypatch.setattr(train, "HfApi", lambda: hub)
+    monkeypatch.setattr(train, "TrackioTracker", SilentTracker)
+    monkeypatch.setattr(train, "train", lambda *_args, **_kwargs: {"steps": 0})
+    monkeypatch.setattr(train, "load_examples", lambda _path: [])
+    monkeypatch.setattr(
+        sys, "argv", ["train", "--arm", "shuffle", "--out", str(tmp_path), "--device", "cpu"]
+    )
+
+    train.main()
+
+    assert hub.events == [("create", MODEL_REPO, "model", True)]
+    assert "resuming" not in capsys.readouterr().out
 
 
 def test_piqa_validation_reads_each_dev_row_with_its_integer_label():
@@ -284,6 +321,45 @@ def test_report_main_plots_every_run_and_lists_the_figures(monkeypatch, tmp_path
 
     assert plotted == [({"shuffle": tmp_path / "shuffle"}, tmp_path / "figs")]
     assert str(tmp_path / "figs" / "training_loss.png") in capsys.readouterr().out
+
+
+def run_main_and_capture_config(monkeypatch, tmp_path, *options):
+    received = []
+
+    def fake_train(cfg, *_args, **_kwargs):
+        received.append(cfg)
+        return {"steps": 0}
+
+    monkeypatch.setattr(train, "TrackioTracker", SilentTracker)
+    monkeypatch.setattr(train, "train", fake_train)
+    monkeypatch.setattr(train, "load_examples", lambda _path: [])
+    argv = ["train", "--arm", "shuffle", "--out", str(tmp_path), "--device", "cpu", "--no-hub"]
+    monkeypatch.setattr(sys, "argv", [*argv, *options])
+
+    train.main()
+
+    return received[0]
+
+
+def test_train_main_passes_the_smoke_schedule_options_to_the_runner(monkeypatch, tmp_path):
+    cfg = run_main_and_capture_config(
+        monkeypatch,
+        tmp_path,
+        "--total-tokens",
+        "2097152",
+        "--eval-every",
+        "2",
+        "--checkpoint-every",
+        "2",
+    )
+
+    assert (cfg.total_tokens, cfg.eval_every, cfg.checkpoint_every) == (2097152, 2, 2)
+
+
+def test_train_main_uses_the_study_schedule_without_options(monkeypatch, tmp_path):
+    cfg = run_main_and_capture_config(monkeypatch, tmp_path)
+
+    assert cfg == TrainConfig()
 
 
 def test_hub_checkpointer_defers_a_failed_upload(monkeypatch, tmp_path, capsys):

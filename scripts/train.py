@@ -27,6 +27,7 @@ from gpt2_scratch.training.tracking import (
 from huggingface_hub import HfApi
 
 BENCHMARKS = ("hellaswag", "piqa", "arc_easy")
+SMOKE = "For a smoke test only; the study uses the default"
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,6 +43,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--project", default=TRACKIO_PROJECT, help="Trackio project name")
     parser.add_argument("--space", default=TRACKIO_SPACE, help="Static dashboard Space")
     parser.add_argument("--bucket", default=TRACKIO_BUCKET, help="Bucket behind the dashboard")
+    defaults = TrainConfig()
+    parser.add_argument("--total-tokens", type=int, default=defaults.total_tokens, help=SMOKE)
+    parser.add_argument("--eval-every", type=int, default=defaults.eval_every, help=SMOKE)
+    parser.add_argument(
+        "--checkpoint-every", type=int, default=defaults.checkpoint_every, help=SMOKE
+    )
     return parser.parse_args()
 
 
@@ -74,7 +81,11 @@ def main() -> None:
     """Train the arm, tracking it in Trackio, and print its final evaluation."""
     args = parse_args()
     encoder = tiktoken.get_encoding("gpt2")
-    cfg = TrainConfig()
+    cfg = TrainConfig(
+        total_tokens=args.total_tokens,
+        eval_every=args.eval_every,
+        checkpoint_every=args.checkpoint_every,
+    )
     model_config = STUDY_CONFIG
     if not args.no_hub:
         _prepare_hub(args.repo, args.arm, args.out)

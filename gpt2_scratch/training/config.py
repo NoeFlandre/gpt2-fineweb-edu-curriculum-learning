@@ -23,8 +23,7 @@ class TrainConfig:
     weight_decay: float = 0.1
     grad_clip: float = 1.0
     eval_every: int = 50
-    checkpoint_every: int = 50
-    publish_every: int = 100
+    checkpoint_every: int = 100
     seed: int = 42
     use_compile: bool = True
 

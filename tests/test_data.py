@@ -56,6 +56,14 @@ def test_collect_documents_stops_once_the_budget_is_reached():
     assert next(rows)["score"] == 3.3
 
 
+def test_collect_documents_stops_at_the_document_that_first_reaches_the_budget():
+    rows = iter([row("x" * 9, 3, 3.1), row("y" * 9, 3, 3.2), row("z" * 9, 3, 3.3)])
+
+    docs = collect_documents(rows, encode, budget=11)
+
+    assert len(docs) == 2
+
+
 def test_documents_start_with_the_end_of_text_token():
     docs = collect_documents(iter([row("hi", 3, 3.1)]), encode, budget=1)
 
@@ -85,7 +93,9 @@ def test_collect_stratified_fills_each_bucket_to_its_quota():
 
 
 def test_collect_stratified_fails_when_the_rows_end_before_every_bucket_is_full():
-    with pytest.raises(StreamTooShortError, match="each needs 6"):
+    with pytest.raises(
+        StreamTooShortError, match=r"rows ended with \[3, 0, 0, 0\] tokens per bucket"
+    ):
         collect_stratified(iter([row("ab", 3, 2.6)]), encode, quota=6)
 
 

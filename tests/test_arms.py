@@ -23,10 +23,46 @@ def test_shuffle_depends_on_the_seed():
     assert first.tolist() != second.tolist()
 
 
+def test_shuffle_is_reproducible_for_a_seed():
+    first = arm_order("shuffle", SCORES, LENGTHS, budget=500, seed=7)
+    second = arm_order("shuffle", SCORES, LENGTHS, budget=500, seed=7)
+
+    assert first.tolist() == second.tolist()
+
+
+def test_shuffle_can_put_any_document_last():
+    scores = np.arange(10, dtype=float)
+    lengths = np.full(10, 100)
+
+    last_documents = {
+        arm_order("shuffle", scores, lengths, budget=1000, seed=seed)[-1] for seed in range(20)
+    }
+
+    assert len(last_documents) > 2
+
+
 def test_ascending_puts_the_lowest_score_first():
     order = arm_order("ascending", SCORES, LENGTHS, budget=500, seed=1)
 
     assert SCORES[order].tolist() == [2.5, 3.0, 3.5, 4.0, 4.5]
+
+
+def test_ascending_sorts_every_document_not_just_a_share_of_them():
+    scores = np.arange(10, dtype=float)[::-1].copy()
+    lengths = np.full(10, 100)
+
+    order = arm_order("ascending", scores, lengths, budget=1000, seed=1)
+
+    assert order.tolist() == list(range(9, -1, -1))
+
+
+def test_ascending_keeps_tied_documents_in_their_original_order():
+    scores = np.array([1.0 if index % 2 == 0 else 0.5 for index in range(40)])
+    lengths = np.full(40, 100)
+
+    order = arm_order("ascending", scores, lengths, budget=4000, seed=0)
+
+    assert order.tolist() == list(range(1, 40, 2)) + list(range(0, 40, 2))
 
 
 def test_descending_puts_the_highest_score_first():
@@ -80,5 +116,5 @@ def test_cooldown_shuffles_the_first_stage_too():
 
 
 def test_unknown_orderings_are_rejected():
-    with pytest.raises(ValueError, match="unknown ordering"):
+    with pytest.raises(ValueError, match="unknown ordering 'random-walk'"):
         arm_order("random-walk", SCORES, LENGTHS, budget=500, seed=1)

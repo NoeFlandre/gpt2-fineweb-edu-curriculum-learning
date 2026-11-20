@@ -37,7 +37,7 @@ Full method: [docs/experiment.md](https://github.com/NoeFlandre/GPT2-Fineweb-Edu
 - `runs/<arm>/model.pt`: final weights
 - `runs/<arm>/config.json`: arm, training and model settings
 - `runs/<arm>/metrics.jsonl`: every training, validation and benchmark record
-- `runs/<arm>/checkpoint.pt`: latest checkpoint (weights, optimizer and data position), published every 100 steps
+- `runs/<arm>/checkpoint.pt`: latest checkpoint (weights, optimizer and data position), saved every 100 steps
 
 ## Resuming
 
@@ -45,5 +45,6 @@ Full method: [docs/experiment.md](https://github.com/NoeFlandre/GPT2-Fineweb-Edu
 uv run python -m scripts.train --arm cooldown --out runs/cooldown
 ```
 
-If `runs/cooldown/checkpoint.pt` is missing locally, it is downloaded from this repository and
+Checkpoints are not kept on the machine: each one is uploaded here and then removed locally. When a
+run starts without a local checkpoint, the latest one is downloaded from this repository, and
 training continues on the same data.

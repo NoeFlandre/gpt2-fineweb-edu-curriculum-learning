@@ -1,3 +1,4 @@
+import builtins
 import threading
 
 from gpt2_scratch.training import tracking
@@ -37,19 +38,23 @@ def test_start_creates_a_named_trackio_run(monkeypatch):
 def test_every_training_step_is_logged_but_the_dashboard_syncs_every_fifty(monkeypatch):
     logged = []
     published = []
-    monkeypatch.setattr(tracking.trackio, "log", lambda _metrics, step: logged.append(step))
+    monkeypatch.setattr(
+        tracking.trackio, "log", lambda metrics, step: logged.append((metrics, step))
+    )
     monkeypatch.setattr(
         tracking,
         "publish",
-        lambda project, _space_id, _bucket_id: published.append(project) or "url",
+        lambda project, space_id, bucket_id: (
+            published.append((project, space_id, bucket_id)) or "url"
+        ),
     )
     tracker = tracking.TrackioTracker("p", "space", "bucket")
 
     for step in range(51):
         tracker.log({"train_loss": 3.0}, step=step)
 
-    assert logged == list(range(51))
-    assert published == ["p", "p"]
+    assert logged == [({"train_loss": 3.0}, step) for step in range(51)]
+    assert published == [("p", "space", "bucket")] * 2
 
 
 def test_evaluation_records_are_logged_without_a_sync(monkeypatch):
@@ -73,12 +78,14 @@ def test_finish_closes_the_run_and_publishes_its_final_state(monkeypatch):
     monkeypatch.setattr(
         tracking,
         "publish",
-        lambda _project, _space_id, bucket_id: published.append(bucket_id) or "url",
+        lambda project, space_id, bucket_id: (
+            published.append((project, space_id, bucket_id)) or "url"
+        ),
     )
 
     tracking.TrackioTracker("p", "space", "bucket").finish()
 
-    assert published == ["bucket"]
+    assert published == [("p", "space", "bucket")]
 
 
 def test_flushing_without_an_active_run_does_nothing():
@@ -105,7 +112,9 @@ def test_flushing_pushes_the_queued_metrics_of_the_active_run(monkeypatch):
     assert flushed == [True]
 
 
-def test_a_failed_dashboard_sync_is_reported_and_training_goes_on(monkeypatch, capsys):
+def test_a_failed_dashboard_sync_is_reported_and_training_goes_on(monkeypatch):
+    printed = []
+    monkeypatch.setattr(builtins, "print", lambda *args, **kwargs: printed.append((args, kwargs)))
     monkeypatch.setattr(tracking.trackio, "log", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(tracking.trackio, "finish", lambda: None)
 
@@ -119,9 +128,10 @@ def test_a_failed_dashboard_sync_is_reported_and_training_goes_on(monkeypatch, c
     tracker.log({"train_loss": 3.0}, step=0)
     tracker.finish()
 
-    output = capsys.readouterr().out
-    assert "dashboard sync deferred (ConnectionError) at step 0" in output
-    assert "dashboard sync deferred (ConnectionError) at the end of the run" in output
+    assert printed == [
+        (("dashboard sync deferred (ConnectionError) at step 0",), {"flush": True}),
+        (("dashboard sync deferred (ConnectionError) at the end of the run",), {"flush": True}),
+    ]
 
 
 def test_publish_syncs_the_project_as_a_public_static_space(monkeypatch):

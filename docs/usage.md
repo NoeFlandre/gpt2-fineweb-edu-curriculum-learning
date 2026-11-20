@@ -4,7 +4,7 @@
 
 - Python 3.12 and [uv](https://docs.astral.sh/uv/)
 - A CUDA GPU with at least 16 GB of memory (measured on an RTX A4500 Laptop GPU)
-- About 10 GB of free disk space for the data, the checkpoints and the Hugging Face cache
+- About 9 GB of free disk space for the data and the final weights; checkpoints are not kept locally
 
 ## Build the data
 
@@ -23,8 +23,9 @@ uv run python -m scripts.prepare_benchmarks --out data/benchmarks
 uv run python -m scripts.train --arm cooldown --out runs/cooldown
 ```
 
-Writes `metrics.jsonl`, `model.pt` and `config.json` into `runs/cooldown`. Checkpoints go to the
-model repository; pass `--no-hub` to keep them local.
+Writes `metrics.jsonl`, `model.pt` and `config.json` into `runs/cooldown`. Each checkpoint is uploaded
+to the model repository and its local copy deleted; pass `--no-hub` to keep checkpoints local
+instead.
 
 ## Plot and upload
 

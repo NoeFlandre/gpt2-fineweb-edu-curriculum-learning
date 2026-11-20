@@ -66,9 +66,9 @@ Evaluated every 50 steps and after the last step, 36 points per arm.
 
 ## Checkpoints
 
-Saved locally every 50 steps, and published to the model repository every 100 steps. An interrupted
-run resumes from its last checkpoint on the same data, fetching it from the repository when it is
-missing.
+A checkpoint is saved every 100 steps and uploaded to the model repository with the metrics so far;
+the local copy is then deleted, so no checkpoint is kept on the machine. An interrupted run resumes
+from the last checkpoint in the repository, on the same data, and the curves stay whole.
 
 ## Limitations
 
