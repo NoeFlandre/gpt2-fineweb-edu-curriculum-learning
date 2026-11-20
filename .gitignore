@@ -185,3 +185,6 @@ htmlcov/
 .coverage
 .mutmut-cache
 site/
+
+# Study data prepared by scripts/prepare_data.py (large)
+data/ordering/

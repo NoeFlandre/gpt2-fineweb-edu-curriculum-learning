@@ -51,16 +51,20 @@ class TrackioTracker:
         """Record metrics at a step; publish every PUBLISH_EVERY training steps."""
         trackio.log(metrics, step=step)
         if "train_loss" in metrics and step % PUBLISH_EVERY == 0:
-            self._publish()
+            self._publish(f"step {step}")
 
     def finish(self) -> None:
         """Close the run and publish its final state."""
         trackio.finish()
-        self._publish()
+        self._publish("the end of the run")
 
-    def _publish(self) -> None:
-        _flush_pending_metrics()
-        publish(self.project, self.space_id, self.bucket_id)
+    def _publish(self, where: str) -> None:
+        """Sync the dashboard; a failed sync is reported and the next one tries again."""
+        try:
+            _flush_pending_metrics()
+            publish(self.project, self.space_id, self.bucket_id)
+        except Exception as error:  # the run goes on; the next sync tries again
+            print(f"dashboard sync deferred ({type(error).__name__}) at {where}", flush=True)
 
 
 def _flush_pending_metrics() -> None:

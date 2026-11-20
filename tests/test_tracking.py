@@ -105,6 +105,25 @@ def test_flushing_pushes_the_queued_metrics_of_the_active_run(monkeypatch):
     assert flushed == [True]
 
 
+def test_a_failed_dashboard_sync_is_reported_and_training_goes_on(monkeypatch, capsys):
+    monkeypatch.setattr(tracking.trackio, "log", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(tracking.trackio, "finish", lambda: None)
+
+    def unreachable(*_args):
+        message = "hub unreachable"
+        raise ConnectionError(message)
+
+    monkeypatch.setattr(tracking, "publish", unreachable)
+    tracker = tracking.TrackioTracker("p", "space", "bucket")
+
+    tracker.log({"train_loss": 3.0}, step=0)
+    tracker.finish()
+
+    output = capsys.readouterr().out
+    assert "dashboard sync deferred (ConnectionError) at step 0" in output
+    assert "dashboard sync deferred (ConnectionError) at the end of the run" in output
+
+
 def test_publish_syncs_the_project_as_a_public_static_space(monkeypatch):
     calls = []
 

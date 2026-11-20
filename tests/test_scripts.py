@@ -283,30 +283,45 @@ def test_hub_checkpointer_defers_a_failed_upload(monkeypatch, tmp_path, capsys):
     assert "checkpoint upload deferred (RuntimeError) at step 4" in capsys.readouterr().out
 
 
+class HubRecorder:
+    """Stands in for the Hub API and records the calls made while a run starts."""
+
+    def __init__(self):
+        self.events = []
+
+    def create_repo(self, repo_id, repo_type, exist_ok):
+        self.events.append(("create", repo_id, repo_type, exist_ok))
+
+
+class SilentTracker:
+    @classmethod
+    def start(cls, **_kwargs):
+        return cls()
+
+    def finish(self):
+        pass
+
+
 def test_main_resumes_from_the_hub_checkpoint_and_publishes_its_checkpoints(
     monkeypatch, tmp_path, capsys
 ):
+    hub = HubRecorder()
     published = []
-
-    class FakeTracker:
-        @classmethod
-        def start(cls, **_kwargs):
-            return cls()
-
-        def finish(self):
-            pass
 
     def fake_train(*_args, on_checkpoint, **_kwargs):
         on_checkpoint(tmp_path, 100)
         return {"steps": 0}
 
-    def fake_publish(_api, _repo, _arm, _out, step):
-        published.append(step)
+    def fake_fetch(_repo, _arm, _out):
+        hub.events.append("fetch")
+        return True
 
-    monkeypatch.setattr(train, "fetch_checkpoint", lambda *_args: True)
-    monkeypatch.setattr(train, "HfApi", lambda: "api")
-    monkeypatch.setattr(train, "publish_checkpoint", fake_publish)
-    monkeypatch.setattr(train, "TrackioTracker", FakeTracker)
+    monkeypatch.setattr(train, "fetch_checkpoint", fake_fetch)
+    monkeypatch.setattr(train, "HfApi", lambda: hub)
+    monkeypatch.setattr(
+        train, "publish_checkpoint", lambda _api, _repo, _arm, _out, step: published.append(step)
+    )
+    monkeypatch.setattr(train, "TrackioTracker", SilentTracker)
     monkeypatch.setattr(train, "train", fake_train)
     monkeypatch.setattr(train, "load_examples", lambda _path: [])
     monkeypatch.setattr(
@@ -316,4 +331,5 @@ def test_main_resumes_from_the_hub_checkpoint_and_publishes_its_checkpoints(
     train.main()
 
     assert published == [100]
+    assert hub.events == [("create", MODEL_REPO, "model", True), "fetch"]
     assert "resuming shuffle" in capsys.readouterr().out

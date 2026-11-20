@@ -266,3 +266,22 @@ def test_losses_are_finite_at_every_evaluation(tmp_path):
     train(small_cfg(), "shuffle", TINY, root, out, device="cpu", encode=encode_bytes)
 
     assert all(math.isfinite(r["val_loss"]) for r in read_records(out) if "val_loss" in r)
+
+
+def test_benchmark_accuracy_is_a_curve_with_a_point_at_every_evaluation(tmp_path):
+    root = make_data_root(tmp_path / "data")
+    out = tmp_path / "run"
+    examples = {"piqa": [{"ctx": "ab", "endings": ["cd", "ef"], "label": 0}]}
+
+    train(
+        small_cfg(),
+        "shuffle",
+        TINY,
+        root,
+        out,
+        device="cpu",
+        encode=encode_bytes,
+        benchmarks=examples,
+    )
+
+    assert [r["step"] for r in read_records(out) if "piqa_acc" in r] == [0, 2, 4]

@@ -63,14 +63,21 @@ def _hub_checkpointer(repo: str, arm: str):
     return checkpoint
 
 
+def _prepare_hub(repo: str, arm: str, out: Path) -> None:
+    """Create the model repo if needed, then resume from its checkpoint when the folder has none."""
+    HfApi().create_repo(repo, repo_type="model", exist_ok=True)
+    if fetch_checkpoint(repo, arm, out):
+        print(f"resuming {arm} from the checkpoint in {out}", flush=True)
+
+
 def main() -> None:
     """Train the arm, tracking it in Trackio, and print its final evaluation."""
     args = parse_args()
     encoder = tiktoken.get_encoding("gpt2")
     cfg = TrainConfig()
     model_config = STUDY_CONFIG
-    if not args.no_hub and fetch_checkpoint(args.repo, args.arm, args.out):
-        print(f"resuming {args.arm} from the checkpoint in {args.out}", flush=True)
+    if not args.no_hub:
+        _prepare_hub(args.repo, args.arm, args.out)
     tracker = TrackioTracker.start(
         project=args.project,
         name=args.arm,
