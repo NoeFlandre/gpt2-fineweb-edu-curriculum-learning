@@ -24,7 +24,8 @@ mkdir -p "$scratch"
 trap 'rm -rf "$scratch"' EXIT
 export UV_PROJECT_ENVIRONMENT="$scratch/venv" UV_CACHE_DIR="$scratch/uv-cache"
 export UV_PYTHON_PREFERENCE=only-system HF_HOME="$scratch/hf"
-uv sync --frozen --no-dev
+# .python-version pins 3.12, which the sites may not have: use the system python3 (3.12 or newer).
+uv sync --frozen --no-dev --python "$(command -v python3)"
 
 mkdir -p "$GPT2_HOME/env"
 tar -C "$scratch" -cf - venv | zstd -q -T0 -f -o "$GPT2_HOME/env/venv.tar.zst.partial"
