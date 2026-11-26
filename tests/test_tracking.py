@@ -18,9 +18,9 @@ class RecordingTracker:
 
 
 def test_the_names_belong_to_the_ordering_study():
-    assert tracking.TRACKIO_PROJECT == "gpt2-fineweb-edu-ordering"
-    assert tracking.TRACKIO_SPACE == "NoeFlandre/gpt2-fineweb-edu-ordering-trackio"
-    assert tracking.TRACKIO_BUCKET == "NoeFlandre/gpt2-fineweb-edu-ordering-trackio-bucket"
+    assert tracking.TRACKIO_PROJECT == "gpt2-fineweb-edu-curriculum-learning"
+    assert tracking.TRACKIO_SPACE == "NoeFlandre/gpt2-fineweb-edu-curriculum-learning"
+    assert tracking.TRACKIO_BUCKET == "NoeFlandre/gpt2-fineweb-edu-curriculum-learning"
 
 
 def test_start_creates_a_named_trackio_run(monkeypatch):

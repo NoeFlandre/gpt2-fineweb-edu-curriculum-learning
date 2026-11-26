@@ -1,5 +1,5 @@
 [project]
-name = "gpt2-fineweb-edu-ordering"
+name = "gpt2-fineweb-edu-curriculum-learning"
 version = "0.1.0"
 description = "GPT-2 on FineWeb-Edu: does the order of documents matter?"
 readme = "README.md"

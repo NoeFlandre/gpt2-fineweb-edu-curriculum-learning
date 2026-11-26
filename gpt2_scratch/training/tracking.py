@@ -8,9 +8,9 @@ during training.
 import trackio
 from trackio import context_vars
 
-TRACKIO_PROJECT = "gpt2-fineweb-edu-ordering"
-TRACKIO_SPACE = "NoeFlandre/gpt2-fineweb-edu-ordering-trackio"
-TRACKIO_BUCKET = "NoeFlandre/gpt2-fineweb-edu-ordering-trackio-bucket"
+TRACKIO_PROJECT = "gpt2-fineweb-edu-curriculum-learning"
+TRACKIO_SPACE = "NoeFlandre/gpt2-fineweb-edu-curriculum-learning"
+TRACKIO_BUCKET = "NoeFlandre/gpt2-fineweb-edu-curriculum-learning"
 PUBLISH_EVERY = 50
 
 

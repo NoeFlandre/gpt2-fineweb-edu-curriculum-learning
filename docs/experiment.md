@@ -1,4 +1,4 @@
-# Experiment: ordering FineWeb-Edu by its classifier score
+# Experiment: curriculum learning on FineWeb-Edu
 
 ## Question
 

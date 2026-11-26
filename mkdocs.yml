@@ -1,5 +1,5 @@
-site_name: GPT-2 from scratch on FineWeb-Edu
-site_description: Ordering a fixed FineWeb-Edu corpus by its classifier score, for GPT-2 pretraining.
+site_name: GPT-2 curriculum learning on FineWeb-Edu
+site_description: Does the order of documents change what GPT-2 learns? Four curricula over one FineWeb-Edu pool.
 theme:
   name: material
   features:
