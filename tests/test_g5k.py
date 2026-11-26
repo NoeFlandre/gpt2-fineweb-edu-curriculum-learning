@@ -602,3 +602,29 @@ def test_package_modules_are_run_as_modules_so_their_imports_resolve():
     for name in ("chain", "status"):
         for shell in scripts.glob("*.sh"):
             assert f"scripts/g5k/{name}.py" not in shell.read_text(), (shell.name, name)
+
+
+def test_chains_on_counts_each_live_chain_once_per_cluster():
+    jobs = [
+        {"name": "gpt2-shuffle-seed44-kinovis", "state": "Running"},
+        {"name": "gpt2-shuffle-seed44-kinovis", "state": "Waiting"},
+        {"name": "gpt2-ascending-seed44-kinovis", "state": "Waiting"},
+        {"name": "gpt2-cooldown-seed43-vercors9", "state": "Running"},
+        {"name": "gpt2-prep-kinovis", "state": "Error"},
+    ]
+
+    assert status.chains_on(jobs, "kinovis") == 2
+    assert status.chains_on(jobs, "vercors9") == 1
+
+
+def test_status_prints_the_chain_count_for_a_cluster(monkeypatch, capsys):
+    monkeypatch.setattr(
+        status,
+        "oarstat_jobs",
+        lambda: [{"name": "gpt2-shuffle-seed44-kinovis", "state": "Running"}],
+    )
+    monkeypatch.setattr("sys.argv", ["status.py", "--chains", "kinovis"])
+
+    status.main()
+
+    assert capsys.readouterr().out == "1\n"

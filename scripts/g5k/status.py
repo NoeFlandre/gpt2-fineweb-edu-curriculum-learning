@@ -63,13 +63,23 @@ def report(runs: Path, jobs: list[dict], finished_dir: Path = FINISHED_DIR) -> s
     return "\n".join(lines) or "no runs yet"
 
 
+def chains_on(jobs: list[dict], cluster: str) -> int:
+    """How many chains are live on a cluster: each chain is one name, its links share it."""
+    names = {str(job.get("name") or "") for job in live_jobs(jobs)}
+    return len({name for name in names if name.endswith(f"-{cluster}")})
+
+
 def main() -> None:
     """Print the report, or check that no matching job is live."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs", type=Path, default=Path("runs"))
     parser.add_argument("--busy", nargs="+", metavar="PREFIX")
+    parser.add_argument("--chains", metavar="CLUSTER")
     args = parser.parse_args()
     jobs = oarstat_jobs()
+    if args.chains is not None:
+        print(chains_on(jobs, args.chains))
+        return
     if args.busy is not None:
         running = busy(jobs, args.busy)
         for job in running:
