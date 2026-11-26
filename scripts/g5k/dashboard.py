@@ -28,6 +28,8 @@ from gpt2_scratch.training.config import TrainConfig
 from gpt2_scratch.training.tracking import TRACKIO_BUCKET, TRACKIO_PROJECT, TRACKIO_SPACE
 from huggingface_hub import HfApi, get_token
 
+from scripts.g5k.run_log import read_records
+
 DASHBOARD_FILES = ("runs.json", "metrics.parquet", "aux/configs.parquet", "settings.json")
 NOT_METRICS = {"id", "run_id", "timestamp", "run_name", "step", "log_id", "space_id"}
 
@@ -93,13 +95,9 @@ def bucket_runs(runs_json: list[dict], configs: list[dict], metrics: list[dict])
 
 
 def _seed_records(metrics_file: Path) -> list[tuple[int, dict]]:
-    """The (step, metrics) records of one metrics file; a line cut short by a kill is skipped."""
+    """The (step, metrics) records of one metrics file."""
     records = []
-    for line in metrics_file.read_text().splitlines():
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    for record in read_records(metrics_file):
         values = {key: value for key, value in record.items() if key != "step"}
         if values:
             records.append((int(record["step"]), values))

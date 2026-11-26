@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 import pytest
-from scripts.g5k import chain, clusters, status
+from scripts.g5k import chain, clusters, run_log, status
 
 A4500 = {"gpu_devices": {"0": {"model": "NVIDIA RTX A4500", "memory": 20480}}}
 
@@ -15,30 +15,6 @@ def write_metrics(path, *records):
 
 
 # chain: the decision each training link takes before it starts
-
-
-def test_last_step_is_zero_without_metrics(tmp_path):
-    assert chain.last_step(tmp_path / "metrics.jsonl") == 0
-
-
-def test_last_step_reads_the_last_record(tmp_path):
-    write_metrics(tmp_path / "metrics.jsonl", {"step": 0}, {"step": 50, "val_loss": 4.2})
-
-    assert chain.last_step(tmp_path / "metrics.jsonl") == 50
-
-
-def test_last_step_skips_a_line_cut_short_and_a_record_without_a_step(tmp_path):
-    path = tmp_path / "metrics.jsonl"
-    path.write_text('{"step": 100}\n{"train_loss": 3.0}\n{"step": 15')
-
-    assert chain.last_step(path) == 100
-
-
-def test_last_step_is_zero_when_no_record_has_a_step(tmp_path):
-    path = tmp_path / "metrics.jsonl"
-    path.write_text('{"train_loss": 3.0}\n')
-
-    assert chain.last_step(path) == 0
 
 
 def test_the_first_link_starts_with_no_failures():
@@ -236,12 +212,12 @@ def test_live_jobs_accept_a_list():
     ]
 
 
-def test_records_skip_a_line_cut_short(tmp_path):
+def test_status_reads_no_records_without_a_file(tmp_path):
     path = tmp_path / "metrics.jsonl"
     path.write_text('{"step": 1}\n{"step": 2')
 
-    assert status.records(path) == [{"step": 1}]
-    assert status.records(tmp_path / "missing.jsonl") == []
+    assert run_log.read_records(path) == [{"step": 1}]
+    assert run_log.read_records(tmp_path / "missing.jsonl") == []
 
 
 def test_last_validation_is_the_latest_loss_or_none():
@@ -591,3 +567,29 @@ def test_read_parquet_turns_a_bucket_table_into_rows(monkeypatch):
     assert dashboard._read_parquet("user/bucket", "metrics.parquet", None) == [
         {"run_name": "shuffle-seed42", "step": 50}
     ]
+
+
+# run_log: one reader for a run's metrics file, shared by the chain, the status and the dashboard
+
+
+def test_run_log_reads_complete_records_and_skips_a_cut_line(tmp_path):
+    from scripts.g5k import run_log
+
+    path = tmp_path / "metrics.jsonl"
+    path.write_text('{"step": 0}\n{"step": 50, "val_loss": 4.0}\n{"step": 100, "tra')
+
+    assert run_log.read_records(path) == [{"step": 0}, {"step": 50, "val_loss": 4.0}]
+
+
+def test_run_log_reads_nothing_without_a_file(tmp_path):
+    from scripts.g5k import run_log
+
+    assert run_log.read_records(tmp_path / "missing.jsonl") == []
+
+
+def test_run_log_last_step_is_the_last_record_that_has_one():
+    from scripts.g5k import run_log
+
+    assert run_log.last_step([{"step": 0}, {"step": 50}, {"val_loss": 4.0}]) == 50
+    assert run_log.last_step([{"val_loss": 4.0}]) == 0
+    assert run_log.last_step([]) == 0

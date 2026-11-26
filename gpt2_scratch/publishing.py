@@ -16,21 +16,23 @@ def remote_path(arm: str, name: str) -> str:
     return f"runs/{arm}/{name}"
 
 
+def _commit(api, repo: str, run: str, out_dir: Path, names: tuple[str, ...], message: str) -> None:
+    """Upload the named files of a run in one commit."""
+    operations = [
+        CommitOperationAdd(path_in_repo=remote_path(run, name), path_or_fileobj=str(out_dir / name))
+        for name in names
+    ]
+    api.create_commit(
+        repo_id=repo, repo_type="model", operations=operations, commit_message=message
+    )
+
+
 def publish_checkpoint(api, repo: str, arm: str, out_dir: Path, step: int) -> None:
     """Upload a run's latest checkpoint and metrics in one commit, then remove the local checkpoint.
 
     If the upload fails, the local checkpoint stays, so the next attempt can upload it.
     """
-    operations = [
-        CommitOperationAdd(path_in_repo=remote_path(arm, name), path_or_fileobj=str(out_dir / name))
-        for name in (CHECKPOINT, METRICS)
-    ]
-    api.create_commit(
-        repo_id=repo,
-        repo_type="model",
-        operations=operations,
-        commit_message=f"{arm}: checkpoint at step {step}",
-    )
+    _commit(api, repo, arm, out_dir, (CHECKPOINT, METRICS), f"{arm}: checkpoint at step {step}")
     (out_dir / CHECKPOINT).unlink()
 
 
@@ -74,13 +76,4 @@ def publish_final(api, repo: str, run: str, out_dir: Path) -> None:
 
     run is the folder in the repository, such as seed42/shuffle.
     """
-    operations = [
-        CommitOperationAdd(path_in_repo=remote_path(run, name), path_or_fileobj=str(out_dir / name))
-        for name in FINAL_FILES
-    ]
-    api.create_commit(
-        repo_id=repo,
-        repo_type="model",
-        operations=operations,
-        commit_message=f"{run}: final checkpoint, weights and metrics",
-    )
+    _commit(api, repo, run, out_dir, FINAL_FILES, f"{run}: final checkpoint, weights and metrics")

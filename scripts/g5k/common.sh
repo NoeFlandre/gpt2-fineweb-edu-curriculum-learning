@@ -44,6 +44,16 @@ oar() {
   fi
 }
 
+# Submit a job and print its id: submit_job NAME QUEUE PROPERTIES RESOURCES COMMAND [oarsub options].
+# The job runs from the repository, and its output goes to $GPT2_HOME/logs.
+submit_job() {
+  local name=$1 queue=$2 properties=$3 resources=$4 command=$5
+  shift 5
+  oar oarsub "$@" -q "$queue" -p "$properties" -l "$resources" -n "$name" -d "$PWD" \
+    -O "$GPT2_HOME/logs/%jobid%.out" -E "$GPT2_HOME/logs/%jobid%.err" "$command" \
+    | sed -n 's/^OAR_JOB_ID=//p'
+}
+
 # The Hugging Face token, for trackio and the dataset stream. Keep it in ~/.hf_token, mode 600.
 load_hf_token() {
   if [ -f "$HOME/.hf_token" ]; then

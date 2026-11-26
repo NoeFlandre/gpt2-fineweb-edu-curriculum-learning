@@ -13,20 +13,10 @@ import argparse
 import json
 from pathlib import Path
 
+from scripts.g5k.run_log import last_step, read_records
+
 MAX_FAILURES = 3
 METRICS = "metrics.jsonl"
-
-
-def last_step(metrics: Path) -> int:
-    """Step of the last complete metric record, or 0 when there is none."""
-    if not metrics.exists():
-        return 0
-    for line in reversed(metrics.read_text().splitlines()):
-        try:
-            return int(json.loads(line)["step"])
-        except (json.JSONDecodeError, KeyError):
-            continue  # a line cut short when a job was killed
-    return 0
 
 
 def next_state(state: dict, step: int) -> dict:
@@ -45,7 +35,7 @@ def next_state(state: dict, step: int) -> dict:
 def begin(run_dir: Path, state_file: Path, max_failures: int = MAX_FAILURES) -> str:
     """Record that a link is starting, and return "stop" once the chain has failed too often."""
     state = json.loads(state_file.read_text()) if state_file.exists() else {}
-    state = next_state(state, last_step(run_dir / METRICS))
+    state = next_state(state, last_step(read_records(run_dir / METRICS)))
     state_file.parent.mkdir(parents=True, exist_ok=True)
     state_file.write_text(json.dumps(state))
     return "stop" if state["failures"] >= max_failures else "run"

@@ -11,6 +11,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from scripts.g5k.run_log import last_step, read_records
+
 FINISHED = ("Terminated", "Error")
 METRICS = "metrics.jsonl"
 FINISHED_DIR = Path.home() / "gpt2-g5k" / "state"
@@ -20,19 +22,6 @@ def live_jobs(oarstat: dict | list) -> list[dict]:
     """The jobs of an `oarstat -J` listing that have not ended."""
     jobs = oarstat.values() if isinstance(oarstat, dict) else oarstat
     return [job for job in jobs if job.get("state") not in FINISHED]
-
-
-def records(metrics: Path) -> list[dict]:
-    """The complete metric records of a run; a line cut short by a killed job is skipped."""
-    if not metrics.exists():
-        return []
-    parsed = []
-    for line in metrics.read_text().splitlines():
-        try:
-            parsed.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return parsed
 
 
 def last_validation(parsed: list[dict]) -> float | None:
@@ -64,8 +53,8 @@ def report(runs: Path, jobs: list[dict], finished_dir: Path = FINISHED_DIR) -> s
     lines = []
     for run in sorted(p for p in runs.glob("seed*/*") if p.is_dir()):
         label = f"{run.name}-{run.parent.name}"
-        parsed = records(run / METRICS)
-        step = parsed[-1].get("step", 0) if parsed else 0
+        parsed = read_records(run / METRICS)
+        step = last_step(parsed)
         val = last_validation(parsed)
         val_text = f"{val:.3f}" if val is not None else "-"
         done = "published" if (finished_dir / f"{label}.done").exists() else "running"

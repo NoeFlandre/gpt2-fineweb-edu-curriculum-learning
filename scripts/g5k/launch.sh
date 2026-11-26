@@ -62,9 +62,8 @@ fi
 mkdir -p "$GPT2_HOME/logs" "$GPT2_HOME/state"
 prep=""
 if [ "$(cat "$GPT2_HOME/READY" 2>/dev/null || true)" != "$(fingerprint)" ]; then
-  prep=$(oarsub -q abaca -p "gpu_count=0 AND memnode>=131072" -l core=8,walltime=12:00 -n "gpt2-prep-$cluster" \
-    -d "$PWD" -O "$GPT2_HOME/logs/%jobid%.out" -E "$GPT2_HOME/logs/%jobid%.err" \
-    "bash scripts/g5k/prepare_site.sh" | sed -n 's/^OAR_JOB_ID=//p')
+  prep=$(submit_job "gpt2-prep-$cluster" abaca "gpu_count=0 AND memnode>=131072" "core=8,walltime=12:00" \
+    "bash scripts/g5k/prepare_site.sh")
   echo "environment and data job: $prep"
 fi
 
@@ -74,9 +73,7 @@ for arm in "${arms[@]}"; do
   if [ -n "$prep" ]; then
     dependency=(-a "$prep")
   fi
-  head=$(oarsub ${dependency[@]+"${dependency[@]}"} -q "$QUEUE" -p "cluster='$cluster'" \
-    -l "gpu=1,walltime=$WALLTIME" -n "gpt2-$arm-seed$seed-$cluster" -d "$PWD" \
-    -O "$GPT2_HOME/logs/%jobid%.out" -E "$GPT2_HOME/logs/%jobid%.err" \
-    "bash scripts/g5k/train_arm.sh $arm $cluster $WALLTIME $seed $QUEUE" | sed -n 's/^OAR_JOB_ID=//p')
+  head=$(submit_job "gpt2-$arm-seed$seed-$cluster" "$QUEUE" "cluster='$cluster'" "gpu=1,walltime=$WALLTIME" \
+    "bash scripts/g5k/train_arm.sh $arm $cluster $WALLTIME $seed $QUEUE" ${dependency[@]+"${dependency[@]}"})
   echo "$arm seed $seed on $cluster: job $head"
 done

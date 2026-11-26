@@ -51,11 +51,8 @@ if [ ! -f "$run/model.pt" ]; then
 
   # Queue the successor now, so it starts the moment this link ends, however it ends.
   if [ -n "${OAR_JOB_ID:-}" ]; then
-    next=$(oar oarsub -a "$OAR_JOB_ID" -q "$queue" -p "cluster='$cluster'" \
-      -l "gpu=1,walltime=$walltime" -n "gpt2-$key-$cluster" -d "$PWD" \
-      -O "$GPT2_HOME/logs/%jobid%.out" -E "$GPT2_HOME/logs/%jobid%.err" \
-      "bash scripts/g5k/train_arm.sh $arm $cluster $walltime $seed $queue" \
-      | sed -n 's/^OAR_JOB_ID=//p') || next=""
+    next=$(submit_job "gpt2-$key-$cluster" "$queue" "cluster='$cluster'" "gpu=1,walltime=$walltime" \
+      "bash scripts/g5k/train_arm.sh $arm $cluster $walltime $seed $queue" -a "$OAR_JOB_ID") || next=""
     if [ -n "$next" ]; then
       echo "$next" > "$successor"
     else
