@@ -1,0 +1,174 @@
+"""Rebuild the Trackio dashboard from every run, and publish it to the dashboard bucket.
+
+Training links never write to the dashboard (--no-dashboard), because a sync replaces the bucket's
+dashboard files with the content of one local database. This job builds the complete dashboard:
+
+- the runs already in the bucket are read from its files (runs.json, configs and metrics parquet);
+- the runs of the given seeds are read from their metrics files on this site, and replace any run
+  of the same name;
+- the bucket files are backed up under backups/<UTC time>/ first;
+- every run is logged into a fresh Trackio database (TRACKIO_DIR must point at an empty folder), and
+  that database is synced once, so the bucket ends up with all the runs.
+
+Usage: TRACKIO_DIR=<empty folder> python -m scripts.g5k.dashboard --runs runs --seeds 43
+"""
+
+import argparse
+import io
+import json
+import math
+import urllib.request
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pyarrow.parquet as pq
+from gpt2_scratch.model.config import STUDY_CONFIG
+from gpt2_scratch.training.config import TrainConfig
+from gpt2_scratch.training.tracking import TRACKIO_BUCKET, TRACKIO_PROJECT, TRACKIO_SPACE
+from huggingface_hub import HfApi, get_token
+
+DASHBOARD_FILES = ("runs.json", "metrics.parquet", "aux/configs.parquet", "settings.json")
+NOT_METRICS = {"id", "run_id", "timestamp", "run_name", "step", "log_id", "space_id"}
+
+
+@dataclass(frozen=True)
+class Run:
+    """One training run for the dashboard: its name, its configuration and its metric records."""
+
+    name: str
+    config: dict
+    records: list[tuple[int, dict]]
+
+
+def fetch(bucket: str, name: str, token: str | None) -> bytes:
+    """The content of one file of the bucket."""
+    url = f"https://huggingface.co/buckets/{bucket}/resolve/{name}"
+    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    return urllib.request.urlopen(request, timeout=120).read()
+
+
+def backup_bucket(bucket: str, token: str | None, stamp: str) -> None:
+    """Copy the dashboard files of the bucket to backups/<stamp>/ before anything replaces them."""
+    additions: list[tuple[str | Path | bytes, str]] = [
+        (fetch(bucket, name, token), f"backups/{stamp}/{name}") for name in DASHBOARD_FILES
+    ]
+    HfApi().batch_bucket_files(bucket, add=additions, token=token)
+
+
+def _metrics_of(row: dict) -> dict:
+    """The metric values of one row of the dashboard's metrics table."""
+    values = {}
+    for key, value in row.items():
+        if key in NOT_METRICS or value is None:
+            continue
+        if isinstance(value, float) and math.isnan(value):
+            continue
+        values[key] = value
+    return values
+
+
+def bucket_runs(runs_json: list[dict], configs: list[dict], metrics: list[dict]) -> list[Run]:
+    """The runs of the dashboard as the bucket files describe them."""
+    configs_by_name = {row["run_name"]: row for row in configs}
+    rows_by_name: dict[str, list[dict]] = {}
+    for row in metrics:
+        rows_by_name.setdefault(row["run_name"], []).append(row)
+    runs = []
+    for run in runs_json:
+        name = run["name"]
+        config_row = configs_by_name[name]
+        config = {
+            "arm": config_row["arm"],
+            "train": config_row["train"],
+            "model": config_row["model"],
+        }
+        records = []
+        for row in sorted(rows_by_name.get(name, []), key=lambda r: r["step"]):
+            values = _metrics_of(row)
+            if values:
+                records.append((int(row["step"]), values))
+        runs.append(Run(name, config, records))
+    return runs
+
+
+def _seed_records(metrics_file: Path) -> list[tuple[int, dict]]:
+    """The (step, metrics) records of one metrics file; a line cut short by a kill is skipped."""
+    records = []
+    for line in metrics_file.read_text().splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        values = {key: value for key, value in record.items() if key != "step"}
+        if values:
+            records.append((int(record["step"]), values))
+    return records
+
+
+def site_runs(root: Path, seed: int) -> list[Run]:
+    """The runs of one training seed, read from the metrics files under root/seed<N>/<arm>/."""
+    runs = []
+    for folder in sorted((root / f"seed{seed}").glob("*")):
+        metrics_file = folder / "metrics.jsonl"
+        if not metrics_file.exists():
+            continue
+        config = {
+            "arm": folder.name,
+            "train": asdict(TrainConfig(seed=seed)),
+            "model": asdict(STUDY_CONFIG),
+        }
+        runs.append(Run(f"{folder.name}-seed{seed}", config, _seed_records(metrics_file)))
+    return runs
+
+
+def merged(from_bucket: list[Run], from_sites: list[Run]) -> list[Run]:
+    """The bucket's runs, with any run that this site also has replaced by the site's version."""
+    names = {run.name for run in from_sites}
+    kept = [run for run in from_bucket if run.name not in names]
+    return kept + from_sites
+
+
+def write_dashboard(runs: list[Run], project: str, space: str, bucket: str) -> None:
+    """Log every run into the local Trackio database, then sync it to the dashboard bucket once."""
+    import trackio  # reads TRACKIO_DIR when it is imported, so the job sets it first
+
+    for run in runs:
+        trackio.init(project=project, name=run.name, config=run.config)
+        for step, values in run.records:
+            trackio.log(values, step=step)
+        trackio.finish()
+    trackio.sync(project, space_id=space, bucket_id=bucket, sdk="static", private=False)
+
+
+def _read_parquet(bucket: str, name: str, token: str | None) -> list[dict]:
+    return pq.read_table(io.BytesIO(fetch(bucket, name, token))).to_pylist()
+
+
+def main() -> None:
+    """Back up the dashboard, rebuild it with every run, and report what it now holds."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--runs", type=Path, default=Path("runs"))
+    parser.add_argument("--seeds", type=int, nargs="+", required=True)
+    parser.add_argument("--bucket", default=TRACKIO_BUCKET)
+    parser.add_argument("--space", default=TRACKIO_SPACE)
+    parser.add_argument("--project", default=TRACKIO_PROJECT)
+    args = parser.parse_args()
+    token = get_token()
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    backup_bucket(args.bucket, token, stamp)
+    current = bucket_runs(
+        json.loads(fetch(args.bucket, "runs.json", token)),
+        _read_parquet(args.bucket, "aux/configs.parquet", token),
+        _read_parquet(args.bucket, "metrics.parquet", token),
+    )
+    from_sites = [run for seed in args.seeds for run in site_runs(args.runs, seed)]
+    runs = merged(current, from_sites)
+    write_dashboard(runs, args.project, args.space, args.bucket)
+    print(f"dashboard rebuilt with {len(runs)} runs (backup: backups/{stamp}/)")
+    for run in runs:
+        print(f"  {run.name}: {len(run.records)} steps")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,6 +1,7 @@
 import io
 import json
 import subprocess
+import sys
 
 import pytest
 from scripts.g5k import chain, clusters, status
@@ -378,3 +379,215 @@ def test_publish_uploads_the_finished_arm_and_removes_its_weights(tmp_path, monk
     assert not (out / "model.pt").exists()
     assert not (out / "config.json").exists()
     assert "published seed42/shuffle to user/repo" in capsys.readouterr().out
+
+
+# dashboard: rebuild the Trackio dashboard from every run, without overwriting anything silently
+
+
+def test_fetch_reads_a_bucket_file_with_the_token(monkeypatch):
+    from scripts.g5k import dashboard
+
+    seen = {}
+
+    def fake_urlopen(request, timeout):
+        assert timeout == 120
+        seen["url"] = request.full_url
+        seen["auth"] = request.get_header("Authorization")
+        return io.BytesIO(b"content")
+
+    monkeypatch.setattr(dashboard.urllib.request, "urlopen", fake_urlopen)
+
+    assert dashboard.fetch("user/bucket", "runs.json", "tok") == b"content"
+    assert seen == {
+        "url": "https://huggingface.co/buckets/user/bucket/resolve/runs.json",
+        "auth": "Bearer tok",
+    }
+
+
+def test_backup_copies_each_dashboard_file_under_a_timestamped_folder(monkeypatch):
+    from scripts.g5k import dashboard
+
+    sent = {}
+
+    class FakeApi:
+        def batch_bucket_files(self, bucket, add, token):
+            sent.update(bucket=bucket, add=add, token=token)
+
+    monkeypatch.setattr(dashboard, "fetch", lambda _bucket, name, _token: f"{name}!".encode())
+    monkeypatch.setattr(dashboard, "HfApi", FakeApi)
+
+    dashboard.backup_bucket("user/bucket", "tok", "20260101T000000Z")
+
+    assert sent["bucket"] == "user/bucket"
+    assert sent["token"] == "tok"
+    assert sent["add"] == [
+        (f"{name}!".encode(), f"backups/20260101T000000Z/{name}")
+        for name in dashboard.DASHBOARD_FILES
+    ]
+
+
+def test_metric_values_skip_identifiers_and_missing_values():
+    from scripts.g5k import dashboard
+
+    row = {
+        "id": 1,
+        "run_id": "r",
+        "run_name": "shuffle-seed42",
+        "step": 50,
+        "val_loss": 4.0,
+        "train_loss": float("nan"),
+        "lr": None,
+        "tokens_per_s": 9.0,
+    }
+
+    assert dashboard._metrics_of(row) == {"val_loss": 4.0, "tokens_per_s": 9.0}
+
+
+def test_bucket_runs_rebuild_each_run_from_the_bucket_files():
+    from scripts.g5k import dashboard
+
+    runs_json = [{"name": "shuffle-seed42"}, {"name": "cooldown-seed42"}]
+    configs = [
+        {"run_name": "shuffle-seed42", "arm": "shuffle", "train": {"seed": 42}, "model": {"n": 1}},
+        {
+            "run_name": "cooldown-seed42",
+            "arm": "cooldown",
+            "train": {"seed": 42},
+            "model": {"n": 1},
+        },
+    ]
+    metrics = [
+        {"run_name": "shuffle-seed42", "step": 100, "train_loss": 3.0, "run_id": "a", "id": 2},
+        {"run_name": "shuffle-seed42", "step": 50, "val_loss": 4.0, "run_id": "a", "id": 1},
+        {"run_name": "shuffle-seed42", "step": 60, "train_loss": None},
+    ]
+
+    runs = dashboard.bucket_runs(runs_json, configs, metrics)
+
+    assert runs[0] == dashboard.Run(
+        "shuffle-seed42",
+        {"arm": "shuffle", "train": {"seed": 42}, "model": {"n": 1}},
+        [(50, {"val_loss": 4.0}), (100, {"train_loss": 3.0})],
+    )
+    assert runs[1].records == []
+
+
+def test_site_runs_read_each_arm_of_a_seed_and_skip_a_cut_line(tmp_path):
+    from scripts.g5k import dashboard
+
+    write_metrics(tmp_path / "seed43" / "shuffle" / "metrics.jsonl", {"step": 50, "val_loss": 4.0})
+    with (tmp_path / "seed43" / "shuffle" / "metrics.jsonl").open("a") as file:
+        file.write('{"step": 100, "tra')
+    write_metrics(tmp_path / "seed43" / "ascending" / "metrics.jsonl", {"step": 0})
+    (tmp_path / "seed43" / "empty").mkdir()
+
+    runs = dashboard.site_runs(tmp_path, 43)
+
+    assert [run.name for run in runs] == ["ascending-seed43", "shuffle-seed43"]
+    shuffle = runs[1]
+    assert shuffle.config["arm"] == "shuffle"
+    assert shuffle.config["train"]["seed"] == 43
+    assert shuffle.records == [(50, {"val_loss": 4.0})]
+
+
+def test_merged_replaces_a_run_the_site_also_has_and_keeps_the_rest():
+    from scripts.g5k import dashboard
+
+    bucket = [
+        dashboard.Run("shuffle-seed42", {}, []),
+        dashboard.Run("shuffle-seed43", {"v": 1}, []),
+    ]
+    sites = [
+        dashboard.Run("shuffle-seed43", {"v": 2}, []),
+        dashboard.Run("ascending-seed43", {}, []),
+    ]
+
+    names = [(run.name, run.config) for run in dashboard.merged(bucket, sites)]
+
+    assert names == [
+        ("shuffle-seed42", {}),
+        ("shuffle-seed43", {"v": 2}),
+        ("ascending-seed43", {}),
+    ]
+
+
+def test_write_dashboard_logs_every_run_then_syncs_once(monkeypatch):
+    from scripts.g5k import dashboard
+
+    calls = []
+
+    class FakeTrackio:
+        def init(self, project, name, config):
+            calls.append(("init", project, name, config))
+
+        def log(self, values, step):
+            calls.append(("log", values, step))
+
+        def finish(self):
+            calls.append(("finish",))
+
+        def sync(self, project, space_id, bucket_id, sdk, private):
+            calls.append(("sync", project, space_id, bucket_id, sdk, private))
+
+    monkeypatch.setitem(sys.modules, "trackio", FakeTrackio())
+    run = dashboard.Run("shuffle-seed43", {"arm": "shuffle"}, [(50, {"val_loss": 4.0})])
+
+    dashboard.write_dashboard([run], "proj", "space", "bucket")
+
+    assert calls == [
+        ("init", "proj", "shuffle-seed43", {"arm": "shuffle"}),
+        ("log", {"val_loss": 4.0}, 50),
+        ("finish",),
+        ("sync", "proj", "space", "bucket", "static", False),
+    ]
+
+
+def test_dashboard_main_backs_up_then_rebuilds_with_the_site_runs(monkeypatch, tmp_path, capsys):
+    from scripts.g5k import dashboard
+
+    write_metrics(tmp_path / "seed43" / "shuffle" / "metrics.jsonl", {"step": 50, "val_loss": 4.0})
+    events = []
+    monkeypatch.setattr(dashboard, "get_token", lambda: "tok")
+    monkeypatch.setattr(
+        dashboard, "backup_bucket", lambda _bucket, _token, stamp: events.append(("backup", stamp))
+    )
+    monkeypatch.setattr(
+        dashboard,
+        "fetch",
+        lambda _bucket, _name, _token: json.dumps([{"name": "cooldown-seed42"}]).encode(),
+    )
+    tables = {
+        "aux/configs.parquet": [
+            {"run_name": "cooldown-seed42", "arm": "cooldown", "train": {}, "model": {}}
+        ],
+        "metrics.parquet": [{"run_name": "cooldown-seed42", "step": 0, "val_loss": 5.0}],
+    }
+    monkeypatch.setattr(dashboard, "_read_parquet", lambda _bucket, name, _token: tables[name])
+    monkeypatch.setattr(
+        dashboard,
+        "write_dashboard",
+        lambda runs, _project, _space, _bucket: events.append(
+            ("write", [run.name for run in runs])
+        ),
+    )
+    monkeypatch.setattr("sys.argv", ["dashboard.py", "--runs", str(tmp_path), "--seeds", "43"])
+
+    dashboard.main()
+
+    assert events[0][0] == "backup"
+    assert events[1] == ("write", ["cooldown-seed42", "shuffle-seed43"])
+    assert "dashboard rebuilt with 2 runs" in capsys.readouterr().out
+
+
+def test_read_parquet_turns_a_bucket_table_into_rows(monkeypatch):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from scripts.g5k import dashboard
+
+    buffer = io.BytesIO()
+    pq.write_table(pa.table({"run_name": ["shuffle-seed42"], "step": [50]}), buffer)
+    monkeypatch.setattr(dashboard, "fetch", lambda _bucket, _name, _token: buffer.getvalue())
+
+    assert dashboard._read_parquet("user/bucket", "metrics.parquet", None) == [
+        {"run_name": "shuffle-seed42", "step": 50}
+    ]
