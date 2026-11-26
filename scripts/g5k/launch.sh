@@ -13,6 +13,8 @@ source scripts/g5k/common.sh
 seed=${SEED:?set SEED, for example SEED=43}
 [[ "$seed" =~ ^[0-9]+$ ]] || { echo "SEED must be a number" >&2; exit 2; }
 WALLTIME=${WALLTIME:-24:00}
+QUEUE=${QUEUE:-abaca}  # abaca, or besteffort where this account has no production access
+[[ "$QUEUE" = abaca || "$QUEUE" = besteffort ]] || { echo "QUEUE must be abaca or besteffort" >&2; exit 2; }
 if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
   echo "usage: SEED=43 bash scripts/g5k/launch.sh CLUSTER ARM [ARM]" >&2
   exit 2
@@ -38,7 +40,7 @@ command -v uv >/dev/null || { echo "install uv on this site first (docs/grid5000
 
 site=$(site_of_host)
 usable=$(python3 scripts/g5k/clusters.py --site "$site")
-if ! grep -q "^$cluster " <<<"$usable"; then
+if [ "$QUEUE" = abaca ] && ! grep -q "^$cluster " <<<"$usable"; then
   echo "$cluster is not a usable abaca cluster at $site:" >&2
   echo "$usable" >&2
   exit 1
@@ -72,9 +74,9 @@ for arm in "${arms[@]}"; do
   if [ -n "$prep" ]; then
     dependency=(-a "$prep")
   fi
-  head=$(oarsub "${dependency[@]}" -q abaca -p "cluster='$cluster'" \
+  head=$(oarsub "${dependency[@]}" -q "$QUEUE" -p "cluster='$cluster'" \
     -l "gpu=1,walltime=$WALLTIME" -n "gpt2-$arm-seed$seed-$cluster" -d "$PWD" \
     -O "$GPT2_HOME/logs/%jobid%.out" -E "$GPT2_HOME/logs/%jobid%.err" \
-    "bash scripts/g5k/train_arm.sh $arm $cluster $WALLTIME $seed" | sed -n 's/^OAR_JOB_ID=//p')
+    "bash scripts/g5k/train_arm.sh $arm $cluster $WALLTIME $seed $QUEUE" | sed -n 's/^OAR_JOB_ID=//p')
   echo "$arm seed $seed on $cluster: job $head"
 done

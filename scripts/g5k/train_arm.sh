@@ -10,7 +10,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 source scripts/g5k/common.sh
 load_hf_token
 
-arm=$1 cluster=$2 walltime=$3 seed=$4
+arm=$1 cluster=$2 walltime=$3 seed=$4 queue=${5:-abaca}
 key="$arm-seed$seed"
 run="runs/seed$seed/$arm"
 data="data/ordering"
@@ -51,10 +51,10 @@ if [ ! -f "$run/model.pt" ]; then
 
   # Queue the successor now, so it starts the moment this link ends, however it ends.
   if [ -n "${OAR_JOB_ID:-}" ]; then
-    next=$(oar oarsub -a "$OAR_JOB_ID" -q abaca -p "cluster='$cluster'" \
+    next=$(oar oarsub -a "$OAR_JOB_ID" -q "$queue" -p "cluster='$cluster'" \
       -l "gpu=1,walltime=$walltime" -n "gpt2-$key-$cluster" -d "$PWD" \
       -O "$GPT2_HOME/logs/%jobid%.out" -E "$GPT2_HOME/logs/%jobid%.err" \
-      "bash scripts/g5k/train_arm.sh $arm $cluster $walltime $seed" \
+      "bash scripts/g5k/train_arm.sh $arm $cluster $walltime $seed $queue" \
       | sed -n 's/^OAR_JOB_ID=//p') || next=""
     if [ -n "$next" ]; then
       echo "$next" > "$successor"
