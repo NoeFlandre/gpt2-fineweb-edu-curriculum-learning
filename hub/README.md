@@ -96,7 +96,8 @@ Every 50 steps, and after the last step:
 
 ## Files
 
-Each run has a folder `runs/<run>/`:
+Each run has a folder `runs/<order>-seed42/`. `<order>` is the document order, and `seed42` is the
+training seed. All four runs use seed 42.
 
 - `model.pt`: final weights (`state_dict`).
 - `config.json`: training and model settings.
@@ -119,7 +120,7 @@ from gpt2_scratch.model.config import STUDY_CONFIG
 from gpt2_scratch.model.gpt2 import GPT2
 
 model = GPT2(STUDY_CONFIG)
-model.load_state_dict(torch.load("runs/shuffle/model.pt", map_location="cpu"))
+model.load_state_dict(torch.load("runs/shuffle-seed42/model.pt", map_location="cpu"))
 model.eval()
 ```
 
