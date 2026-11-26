@@ -74,7 +74,7 @@ for arm in "${arms[@]}"; do
   if [ -n "$prep" ]; then
     dependency=(-a "$prep")
   fi
-  head=$(oarsub "${dependency[@]}" -q "$QUEUE" -p "cluster='$cluster'" \
+  head=$(oarsub ${dependency[@]+"${dependency[@]}"} -q "$QUEUE" -p "cluster='$cluster'" \
     -l "gpu=1,walltime=$WALLTIME" -n "gpt2-$arm-seed$seed-$cluster" -d "$PWD" \
     -O "$GPT2_HOME/logs/%jobid%.out" -E "$GPT2_HOME/logs/%jobid%.err" \
     "bash scripts/g5k/train_arm.sh $arm $cluster $WALLTIME $seed $QUEUE" | sed -n 's/^OAR_JOB_ID=//p')
