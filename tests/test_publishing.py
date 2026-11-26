@@ -127,3 +127,30 @@ def test_fetch_checkpoint_leaves_no_download_folders_when_the_hub_has_none(monke
     assert publishing.fetch_checkpoint("user/repo", "uniform", out) is False
     assert not (out / "runs").exists()
     assert not (out / ".cache").exists()
+
+
+def test_publish_final_uploads_weights_config_and_metrics(tmp_path):
+    from gpt2_scratch import publishing
+
+    class FakeApi:
+        def __init__(self):
+            self.commits = []
+
+        def create_commit(self, **kwargs):
+            self.commits.append(kwargs)
+
+    for name in ("checkpoint.pt", "model.pt", "config.json", "metrics.jsonl"):
+        (tmp_path / name).write_text("x")
+    api = FakeApi()
+
+    publishing.publish_final(api, "user/repo", "shuffle", tmp_path)
+
+    (commit,) = api.commits
+    assert commit["repo_id"] == "user/repo"
+    assert commit["repo_type"] == "model"
+    assert [op.path_in_repo for op in commit["operations"]] == [
+        "runs/shuffle/checkpoint.pt",
+        "runs/shuffle/model.pt",
+        "runs/shuffle/config.json",
+        "runs/shuffle/metrics.jsonl",
+    ]

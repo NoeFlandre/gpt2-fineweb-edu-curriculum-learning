@@ -164,10 +164,9 @@ class _Run:
             self.on_checkpoint(self.out_dir, next_step)
 
     def finish(self) -> None:
-        """Save the final weights and configuration, and remove the checkpoint."""
+        """Save the final weights and configuration; the checkpoint is kept for publishing."""
         torch.save(self.model.state_dict(), self.out_dir / "model.pt")
         (self.out_dir / "config.json").write_text(json.dumps(self.identity, indent=2))
-        (self.out_dir / CHECKPOINT).unlink(missing_ok=True)
 
     def _update(self, step: int) -> dict[str, float]:
         """Accumulate gradients over one optimizer step and return its metrics."""

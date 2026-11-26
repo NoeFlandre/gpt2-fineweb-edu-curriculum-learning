@@ -215,7 +215,7 @@ def test_an_interrupted_run_resumes_from_its_last_checkpoint(tmp_path):
 
     assert [r["step"] for r in read_records(out) if "train_loss" in r] == [0, 1, 2, 3]
     assert summary["steps"] == 4
-    assert not (out / "checkpoint.pt").exists()
+    assert (out / "checkpoint.pt").exists()
 
 
 def test_resume_refuses_a_checkpoint_from_another_configuration(tmp_path):

@@ -40,6 +40,10 @@ uv run python -m scripts.upload --runs runs
 bash scripts/run_experiment.sh
 ```
 
+## Run on Grid'5000
+
+The same study can run on Grid'5000's `abaca` queue, one chain of GPU jobs per arm. See [Grid'5000](grid5000.md).
+
 ## Tests and quality gates
 
 ```bash

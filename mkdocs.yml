@@ -10,6 +10,7 @@ nav:
   - Experiment: experiment.md
   - Usage: usage.md
   - Architecture: architecture.md
+  - Grid'5000: grid5000.md
 markdown_extensions:
   - admonition
   - pymdownx.superfences

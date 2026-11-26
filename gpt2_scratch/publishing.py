@@ -64,3 +64,20 @@ def _discard_download(out_dir: Path) -> None:
     """Remove the folders that a download into out_dir leaves behind."""
     shutil.rmtree(out_dir / "runs", ignore_errors=True)
     shutil.rmtree(out_dir / ".cache", ignore_errors=True)
+
+
+FINAL_FILES = (CHECKPOINT, "model.pt", "config.json", METRICS)
+
+
+def publish_final(api, repo: str, arm: str, out_dir: Path) -> None:
+    """Upload a finished run's weights, configuration and metrics in one commit."""
+    operations = [
+        CommitOperationAdd(path_in_repo=remote_path(arm, name), path_or_fileobj=str(out_dir / name))
+        for name in FINAL_FILES
+    ]
+    api.create_commit(
+        repo_id=repo,
+        repo_type="model",
+        operations=operations,
+        commit_message=f"{arm}: final weights",
+    )

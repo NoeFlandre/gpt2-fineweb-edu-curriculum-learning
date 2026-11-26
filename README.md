@@ -54,10 +54,12 @@ bash scripts/run_experiment.sh   # needs a CUDA GPU and a Hugging Face token wit
 
 The steps can also be run one at a time: `scripts/prepare_data.py`, `scripts/prepare_benchmarks.py`, `scripts/train.py --arm <name>`, `scripts/report.py` and `scripts/upload.py`. See [docs/usage.md](docs/usage.md).
 
+To run the study on Grid'5000 instead (the `abaca` production queue, one GPU per arm), see [docs/grid5000.md](docs/grid5000.md).
+
 ## Repository
 
 - `gpt2_scratch/`: model, data, orders, evaluation, training and tracking
-- `scripts/`: entry points
+- `scripts/`: entry points; `scripts/g5k/` runs the study on Grid'5000
 - `tests/`: test suite
 - `docs/`: method, usage and architecture
 - `data/benchmarks/`: HellaSwag, PIQA and ARC-Easy examples
