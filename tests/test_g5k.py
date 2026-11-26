@@ -593,3 +593,12 @@ def test_run_log_last_step_is_the_last_record_that_has_one():
     assert run_log.last_step([{"step": 0}, {"step": 50}, {"val_loss": 4.0}]) == 50
     assert run_log.last_step([{"val_loss": 4.0}]) == 0
     assert run_log.last_step([]) == 0
+
+
+def test_package_modules_are_run_as_modules_so_their_imports_resolve():
+    from pathlib import Path
+
+    scripts = Path("scripts/g5k")
+    for name in ("chain", "status"):
+        for shell in scripts.glob("*.sh"):
+            assert f"scripts/g5k/{name}.py" not in shell.read_text(), (shell.name, name)

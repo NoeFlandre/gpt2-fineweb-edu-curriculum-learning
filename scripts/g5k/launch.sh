@@ -51,7 +51,7 @@ busy_prefixes=(gpt2-prep-)
 for arm in "${arms[@]}"; do
   busy_prefixes+=("gpt2-$arm-seed$seed-")
 done
-if busy=$(python3 scripts/g5k/status.py --busy "${busy_prefixes[@]}"); then
+if busy=$(python3 -m scripts.g5k.status --busy "${busy_prefixes[@]}"); then
   :
 else
   echo "already running (or oarstat failed); cancel these or wait for them:" >&2

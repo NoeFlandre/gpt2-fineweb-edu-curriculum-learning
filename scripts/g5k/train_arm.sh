@@ -43,7 +43,7 @@ zstd -dc "$GPT2_HOME/env/venv.tar.zst" | tar -x -C "$scratch"
 
 # Training left its weights but was not published (a failed upload): publish them, do not retrain.
 if [ ! -f "$run/model.pt" ]; then
-  verdict=$(python3 scripts/g5k/chain.py begin "$run" "$state")
+  verdict=$(python3 -m scripts.g5k.chain begin "$run" "$state")
   if [ "$verdict" = "stop" ]; then
     echo "stopping $key: its last jobs made no progress" >&2
     exit 1
