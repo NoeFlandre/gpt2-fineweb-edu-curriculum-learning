@@ -62,7 +62,7 @@ fi
 mkdir -p "$GPT2_HOME/logs" "$GPT2_HOME/state"
 prep=""
 if [ "$(cat "$GPT2_HOME/READY" 2>/dev/null || true)" != "$(fingerprint)" ]; then
-  prep=$(oarsub -q abaca -p gpu_count=0 -l core=8,walltime=12:00 -n "gpt2-prep-$cluster" \
+  prep=$(oarsub -q abaca -p "gpu_count=0 AND memnode>=131072" -l core=8,walltime=12:00 -n "gpt2-prep-$cluster" \
     -d "$PWD" -O "$GPT2_HOME/logs/%jobid%.out" -E "$GPT2_HOME/logs/%jobid%.err" \
     "bash scripts/g5k/prepare_site.sh" | sed -n 's/^OAR_JOB_ID=//p')
   echo "environment and data job: $prep"
