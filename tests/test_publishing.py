@@ -143,14 +143,14 @@ def test_publish_final_uploads_weights_config_and_metrics(tmp_path):
         (tmp_path / name).write_text("x")
     api = FakeApi()
 
-    publishing.publish_final(api, "user/repo", "shuffle", tmp_path)
+    publishing.publish_final(api, "user/repo", "seed42/shuffle", tmp_path)
 
     (commit,) = api.commits
     assert commit["repo_id"] == "user/repo"
     assert commit["repo_type"] == "model"
     assert [op.path_in_repo for op in commit["operations"]] == [
-        "runs/shuffle/checkpoint.pt",
-        "runs/shuffle/model.pt",
-        "runs/shuffle/config.json",
-        "runs/shuffle/metrics.jsonl",
+        "runs/seed42/shuffle/checkpoint.pt",
+        "runs/seed42/shuffle/model.pt",
+        "runs/seed42/shuffle/config.json",
+        "runs/seed42/shuffle/metrics.jsonl",
     ]

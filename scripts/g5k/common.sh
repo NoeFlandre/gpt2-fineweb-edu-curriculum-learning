@@ -2,9 +2,9 @@
 #
 # Per-site state lives in $GPT2_HOME, outside the repository, so that uploaded runs stay clean:
 #   env/venv.tar.zst    the packed training environment (built once per site)
-#   READY               fingerprint of the code and lockfile the environment and data match
-#   state/<arm>.json    chain progress, read by chain.py
-#   state/<arm>.next    job id of the successor queued by the last link of a chain
+#   READY-seed<N>       fingerprint of the code and lockfile the environment and seed N data match
+#   state/<arm>-seed<N>.json    chain progress, read by chain.py
+#   state/<arm>-seed<N>.next    job id of the successor queued by the last link of a chain
 #   logs/               OAR stdout and stderr
 
 export PATH="$HOME/.local/bin:$PATH"

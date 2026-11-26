@@ -1,6 +1,6 @@
 """Train one ordering arm, tracking curves in Trackio and keeping its checkpoints on the Hub.
 
-Example: python -m scripts.train --arm cooldown --out runs/cooldown
+Example: python -m scripts.train --arm cooldown --seed 42 --out runs/seed42/cooldown
 
 If the output folder has no checkpoint, the one published for this arm is downloaded first, so an
 interrupted run resumes from the Hub. Pass --no-hub to keep everything local.
@@ -44,6 +44,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--space", default=TRACKIO_SPACE, help="Static dashboard Space")
     parser.add_argument("--bucket", default=TRACKIO_BUCKET, help="Bucket behind the dashboard")
     defaults = TrainConfig()
+    parser.add_argument("--seed", type=int, default=defaults.seed, help="training and data seed")
     parser.add_argument("--total-tokens", type=int, default=defaults.total_tokens, help=SMOKE)
     parser.add_argument("--eval-every", type=int, default=defaults.eval_every, help=SMOKE)
     parser.add_argument(
@@ -85,13 +86,15 @@ def main() -> None:
         total_tokens=args.total_tokens,
         eval_every=args.eval_every,
         checkpoint_every=args.checkpoint_every,
+        seed=args.seed,
     )
     model_config = STUDY_CONFIG
+    run = f"seed{args.seed}/{args.arm}"
     if not args.no_hub:
-        _prepare_hub(args.repo, args.arm, args.out)
+        _prepare_hub(args.repo, run, args.out)
     tracker = TrackioTracker.start(
         project=args.project,
-        name=args.arm,
+        name=f"{args.arm}-seed{args.seed}",
         config={"arm": args.arm, "train": asdict(cfg), "model": asdict(model_config)},
         space_id=args.space,
         bucket_id=args.bucket,
@@ -107,7 +110,7 @@ def main() -> None:
             benchmarks=load_benchmarks(args.benchmarks),
             encode=encoder.encode_ordinary,
             tracker=tracker,
-            on_checkpoint=None if args.no_hub else _hub_checkpointer(args.repo, args.arm),
+            on_checkpoint=None if args.no_hub else _hub_checkpointer(args.repo, run),
         )
     finally:
         tracker.finish()

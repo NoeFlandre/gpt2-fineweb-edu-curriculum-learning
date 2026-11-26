@@ -431,4 +431,4 @@ def test_main_resumes_from_the_hub_checkpoint_and_publishes_its_checkpoints(
 
     assert published == [100]
     assert hub.events == [("create", MODEL_REPO, "model", True), "fetch"]
-    assert "resuming shuffle" in capsys.readouterr().out
+    assert "resuming seed42/shuffle" in capsys.readouterr().out

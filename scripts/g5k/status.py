@@ -1,4 +1,4 @@
-"""Show the training chains of this site: each arm's last metrics and its live OAR jobs.
+"""Show the training chains of this site: each run's last metrics and its live OAR jobs.
 
 Run on a frontend. With --busy, exit 1 when a live job name starts with one of the prefixes, which
 launch.sh uses to refuse starting a chain that is already running.
@@ -54,23 +54,24 @@ def busy(jobs: list[dict], prefixes: list[str]) -> list[dict]:
     return [job for job in jobs if str(job.get("name") or "").startswith(tuple(prefixes))]
 
 
+def job_id(job: dict) -> str:
+    """The OAR job id of an `oarstat -J` entry."""
+    return str(job.get("Job_Id", job.get("id", "?")))
+
+
 def report(runs: Path, jobs: list[dict], finished_dir: Path = FINISHED_DIR) -> str:
-    """One line per arm with its last step and validation loss, then the live jobs."""
+    """One line per run with its last step and validation loss, then the live jobs."""
     lines = []
-    for run in sorted(p for p in runs.glob("*") if p.is_dir()):
+    for run in sorted(p for p in runs.glob("seed*/*") if p.is_dir()):
+        label = f"{run.name}-{run.parent.name}"
         parsed = records(run / METRICS)
         step = parsed[-1].get("step", 0) if parsed else 0
         val = last_validation(parsed)
         val_text = f"{val:.3f}" if val is not None else "-"
-        done = "published" if (finished_dir / f"{run.name}.done").exists() else "running"
-        lines.append(f"{run.name:<12} step {step:>5}  val_loss {val_text:>6}  {done}")
+        done = "published" if (finished_dir / f"{label}.done").exists() else "running"
+        lines.append(f"{label:<22} step {step:>5}  val_loss {val_text:>6}  {done}")
     lines.extend(f"job {job_id(job)}  {job.get('name')}  {job.get('state')}" for job in jobs)
     return "\n".join(lines) or "no runs yet"
-
-
-def job_id(job: dict) -> str:
-    """The OAR job id of an `oarstat -J` entry."""
-    return str(job.get("Job_Id", job.get("id", "?")))
 
 
 def main() -> None:

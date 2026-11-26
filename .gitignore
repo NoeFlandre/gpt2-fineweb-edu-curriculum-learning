@@ -187,4 +187,4 @@ htmlcov/
 site/
 
 # Study data prepared by scripts/prepare_data.py (large)
-data/ordering/
+data/ordering*/

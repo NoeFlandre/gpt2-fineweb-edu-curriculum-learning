@@ -261,21 +261,20 @@ def test_job_ids_fall_back_to_the_id_key_then_a_placeholder():
 
 def test_report_shows_each_arm_and_the_live_jobs(tmp_path):
     write_metrics(
-        tmp_path / "runs" / "shuffle" / "metrics.jsonl",
+        tmp_path / "runs" / "seed42" / "shuffle" / "metrics.jsonl",
         {"step": 0},
         {"step": 1716, "val_loss": 4.001},
     )
     (tmp_path / "state").mkdir()
-    (tmp_path / "state" / "shuffle.done").write_text("")
-    write_metrics(tmp_path / "runs" / "cooldown" / "metrics.jsonl", {"step": 300})
-    (tmp_path / "runs" / "empty").mkdir()
+    (tmp_path / "state" / "shuffle-seed42.done").write_text("")
+    write_metrics(tmp_path / "runs" / "seed43" / "cooldown" / "metrics.jsonl", {"step": 300})
     jobs = [{"Job_Id": 9, "name": "gpt2-cooldown-gros", "state": "Waiting"}]
 
     text = status.report(tmp_path / "runs", jobs, tmp_path / "state")
 
-    assert "shuffle" in text
+    assert "shuffle-seed42" in text
     assert "step  1716  val_loss  4.001  published" in text
-    assert "cooldown" in text
+    assert "cooldown-seed43" in text
     assert "step   300" in text
     assert "job 9  gpt2-cooldown-gros  Waiting" in text
 
@@ -344,7 +343,7 @@ def test_status_main_prints_the_report(tmp_path, monkeypatch, capsys):
 def test_publish_uploads_the_finished_arm_and_removes_its_weights(tmp_path, monkeypatch, capsys):
     from scripts.g5k import publish
 
-    out = tmp_path / "runs" / "shuffle"
+    out = tmp_path / "runs" / "seed42" / "shuffle"
     out.mkdir(parents=True)
     (out / "checkpoint.pt").write_bytes(b"state")
     (out / "model.pt").write_bytes(b"weights")
@@ -354,16 +353,27 @@ def test_publish_uploads_the_finished_arm_and_removes_its_weights(tmp_path, monk
     monkeypatch.setattr(
         publish,
         "publish_final",
-        lambda api, repo, arm, folder: sent.update(api=api, repo=repo, arm=arm, folder=folder),
+        lambda api, repo, run, folder: sent.update(api=api, repo=repo, run=run, folder=folder),
     )
     monkeypatch.setattr(
-        "sys.argv", ["publish.py", "--arm", "shuffle", "--out", str(out), "--repo", "user/repo"]
+        "sys.argv",
+        [
+            "publish.py",
+            "--arm",
+            "shuffle",
+            "--seed",
+            "42",
+            "--out",
+            str(out),
+            "--repo",
+            "user/repo",
+        ],
     )
 
     publish.main()
 
-    assert sent == {"api": "api", "repo": "user/repo", "arm": "shuffle", "folder": out}
+    assert sent == {"api": "api", "repo": "user/repo", "run": "seed42/shuffle", "folder": out}
     assert not (out / "checkpoint.pt").exists()
     assert not (out / "model.pt").exists()
     assert not (out / "config.json").exists()
-    assert "published shuffle to user/repo" in capsys.readouterr().out
+    assert "published seed42/shuffle to user/repo" in capsys.readouterr().out

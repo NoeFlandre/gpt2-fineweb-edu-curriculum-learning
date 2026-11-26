@@ -69,15 +69,18 @@ def _discard_download(out_dir: Path) -> None:
 FINAL_FILES = (CHECKPOINT, "model.pt", "config.json", METRICS)
 
 
-def publish_final(api, repo: str, arm: str, out_dir: Path) -> None:
-    """Upload a finished run's weights, configuration and metrics in one commit."""
+def publish_final(api, repo: str, run: str, out_dir: Path) -> None:
+    """Upload a finished run's checkpoint, weights, configuration and metrics in one commit.
+
+    run is the folder in the repository, such as seed42/shuffle.
+    """
     operations = [
-        CommitOperationAdd(path_in_repo=remote_path(arm, name), path_or_fileobj=str(out_dir / name))
+        CommitOperationAdd(path_in_repo=remote_path(run, name), path_or_fileobj=str(out_dir / name))
         for name in FINAL_FILES
     ]
     api.create_commit(
         repo_id=repo,
         repo_type="model",
         operations=operations,
-        commit_message=f"{arm}: final weights",
+        commit_message=f"{run}: final checkpoint, weights and metrics",
     )
