@@ -68,7 +68,7 @@ if [ ! -f "$run/model.pt" ]; then
   cp -r "$data/arms/$arm" "$scratch/data/arms/"
   export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
   "$scratch/venv/bin/python" -m scripts.train --arm "$arm" --seed "$seed" --data "$scratch/data" \
-    --benchmarks data/benchmarks --out "$run" --no-hub
+    --benchmarks data/benchmarks --out "$run" --no-hub --no-dashboard
 fi
 
 "$scratch/venv/bin/python" -m scripts.g5k.publish --arm "$arm" --seed "$seed" --out "$run"

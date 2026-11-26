@@ -40,6 +40,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--repo", default=MODEL_REPO, help="Model repo for checkpoints")
     parser.add_argument("--no-hub", action="store_true", help="keep checkpoints local only")
+    parser.add_argument(
+        "--no-dashboard",
+        action="store_true",
+        help="do not log to Trackio: nothing is written to the dashboard bucket",
+    )
     parser.add_argument("--project", default=TRACKIO_PROJECT, help="Trackio project name")
     parser.add_argument("--space", default=TRACKIO_SPACE, help="Static dashboard Space")
     parser.add_argument("--bucket", default=TRACKIO_BUCKET, help="Bucket behind the dashboard")
@@ -97,13 +102,15 @@ def main() -> None:
     run = f"seed{args.seed}/{args.arm}"
     if not args.no_hub:
         _prepare_hub(args.repo, run, args.out)
-    tracker = TrackioTracker.start(
-        project=args.project,
-        name=f"{args.arm}-seed{args.seed}",
-        config={"arm": args.arm, "train": asdict(cfg), "model": asdict(model_config)},
-        space_id=args.space,
-        bucket_id=args.bucket,
-    )
+    tracker = None
+    if not args.no_dashboard:
+        tracker = TrackioTracker.start(
+            project=args.project,
+            name=f"{args.arm}-seed{args.seed}",
+            config={"arm": args.arm, "train": asdict(cfg), "model": asdict(model_config)},
+            space_id=args.space,
+            bucket_id=args.bucket,
+        )
     try:
         summary = train(
             cfg,
@@ -118,7 +125,8 @@ def main() -> None:
             on_checkpoint=None if args.no_hub else _hub_checkpointer(args.repo, run),
         )
     finally:
-        tracker.finish()
+        if tracker is not None:
+            tracker.finish()
     print(summary)
 
 

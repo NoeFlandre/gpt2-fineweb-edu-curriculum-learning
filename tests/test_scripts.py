@@ -432,3 +432,38 @@ def test_main_resumes_from_the_hub_checkpoint_and_publishes_its_checkpoints(
     assert published == [100]
     assert hub.events == [("create", MODEL_REPO, "model", True), "fetch"]
     assert "resuming seed42/shuffle" in capsys.readouterr().out
+
+
+def test_no_dashboard_skips_trackio_and_trains_without_a_tracker(monkeypatch, tmp_path):
+    seen = {}
+
+    def fail_start(**_kwargs):
+        msg = "Trackio must not start with --no-dashboard"
+        raise AssertionError(msg)
+
+    def fake_train(*_args, tracker, **_kwargs):
+        seen["tracker"] = tracker
+        return {"steps": 0}
+
+    monkeypatch.setattr(train.TrackioTracker, "start", fail_start)
+    monkeypatch.setattr(train, "train", fake_train)
+    monkeypatch.setattr(train, "load_examples", lambda _path: [])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "train",
+            "--arm",
+            "shuffle",
+            "--out",
+            str(tmp_path),
+            "--no-hub",
+            "--no-dashboard",
+            "--device",
+            "cpu",
+        ],
+    )
+
+    train.main()
+
+    assert seen == {"tracker": None}
