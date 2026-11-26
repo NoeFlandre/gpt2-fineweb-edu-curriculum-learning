@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
-# CPU job, once per site and seed: build the training environment and that seed's study data on the
-# site's NFS home. Submitted by launch.sh. It does nothing when READY already matches the code, so
+# CPU job, once per site: build the training environment and the study data on the site's NFS home. Submitted by launch.sh. It does nothing when READY already matches the code, so
 # rerunning is safe.
 #
-# Usage: bash scripts/g5k/prepare_site.sh SEED
+# Usage: bash scripts/g5k/prepare_site.sh
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 source scripts/g5k/common.sh
 load_hf_token
 
-seed=$1
-data="data/ordering-seed$seed"
-ready="$GPT2_HOME/READY-seed$seed"
+data="data/ordering"
+ready="$GPT2_HOME/READY"
 
 fp=$(fingerprint)
 if [ "$(cat "$ready" 2>/dev/null || true)" = "$fp" ]; then
-  echo "environment and seed $seed data already match this code ($fp)"
+  echo "environment and data already match this code ($fp)"
   exit 0
 fi
 
@@ -33,6 +31,6 @@ tar -C "$scratch" -cf - venv | zstd -q -T0 -f -o "$GPT2_HOME/env/venv.tar.zst.pa
 mv "$GPT2_HOME/env/venv.tar.zst.partial" "$GPT2_HOME/env/venv.tar.zst"
 
 rm -rf "$data"
-"$scratch/venv/bin/python" -m scripts.prepare_data --out "$data" --seed "$seed"
+"$scratch/venv/bin/python" -m scripts.prepare_data --out "$data"
 printf '%s\n' "$fp" > "$ready"
-echo "environment and seed $seed data ready ($fp)"
+echo "environment and data ready ($fp)"

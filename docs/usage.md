@@ -8,25 +8,26 @@
 
 ## Seeds
 
-The seed sets the data pool, the four document orders and the model initialization. Each seed has its
-own folders: `data/ordering-seed<N>/` for the data and `runs/seed<N>/<order>/` for the runs. The study uses
-seed 42, and `scripts/run_experiment.sh` takes `SEED` (default 42).
+The seed sets only the model initialization. The data (the pool, the four document orders and the
+validation split) is built once with a fixed seed of 42, so every training seed sees the same data. Each
+training seed has its own runs folder, `runs/seed<N>/<order>/`. `scripts/run_experiment.sh` takes `SEED`
+(default 42).
 
 ## Build the data
 
 ```bash
-uv run python -m scripts.prepare_data --out data/ordering-seed42 --seed 42
+uv run python -m scripts.prepare_data --out data/ordering
 uv run python -m scripts.prepare_benchmarks --out data/benchmarks
 ```
 
 `prepare_data` streams FineWeb-Edu and writes the training pool in each of the four orders under
-`data/ordering-seed42/arms/`, and the held-out validation split with its score buckets under
-`data/ordering-seed42/validation/` (`buckets.json` reports the tokens per bucket).
+`data/ordering/arms/`, and the held-out validation split with its score buckets under
+`data/ordering/validation/` (`buckets.json` reports the tokens per bucket).
 
 ## Train one arm
 
 ```bash
-uv run python -m scripts.train --arm cooldown --seed 42 --data data/ordering-seed42 --out runs/seed42/cooldown
+uv run python -m scripts.train --arm cooldown --seed 42 --data data/ordering --out runs/seed42/cooldown
 ```
 
 Writes `metrics.jsonl`, `model.pt` and `config.json` into `runs/seed42/cooldown`. Each checkpoint is uploaded

@@ -44,7 +44,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--space", default=TRACKIO_SPACE, help="Static dashboard Space")
     parser.add_argument("--bucket", default=TRACKIO_BUCKET, help="Bucket behind the dashboard")
     defaults = TrainConfig()
-    parser.add_argument("--seed", type=int, default=defaults.seed, help="training and data seed")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=defaults.seed,
+        help="model initialization seed (the data is fixed)",
+    )
     parser.add_argument("--total-tokens", type=int, default=defaults.total_tokens, help=SMOKE)
     parser.add_argument("--eval-every", type=int, default=defaults.eval_every, help=SMOKE)
     parser.add_argument(

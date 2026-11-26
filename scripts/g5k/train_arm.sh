@@ -13,7 +13,7 @@ load_hf_token
 arm=$1 cluster=$2 walltime=$3 seed=$4
 key="$arm-seed$seed"
 run="runs/seed$seed/$arm"
-data="data/ordering-seed$seed"
+data="data/ordering"
 state="$GPT2_HOME/state/$key.json"
 successor="$GPT2_HOME/state/$key.next"
 finished="$GPT2_HOME/state/$key.done"
@@ -30,8 +30,8 @@ if [ -f "$finished" ]; then
   exit 0
 fi
 
-if [ "$(cat "$GPT2_HOME/READY-seed$seed" 2>/dev/null || true)" != "$(fingerprint)" ]; then
-  echo "the environment or seed $seed data does not match this code: run launch.sh first" >&2
+if [ "$(cat "$GPT2_HOME/READY" 2>/dev/null || true)" != "$(fingerprint)" ]; then
+  echo "the environment or data does not match this code: run launch.sh first" >&2
   exit 1
 fi
 

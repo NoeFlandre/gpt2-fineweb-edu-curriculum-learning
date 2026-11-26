@@ -29,6 +29,9 @@ from gpt2_scratch.training.config import TrainConfig
 EDU = "HuggingFaceFW/fineweb-edu"
 VAL_TOKENS = 2_000_000
 STREAM_BUFFER = 10_000
+DATA_SEED = (
+    42  # fixed: the pool, the orders and the validation split never depend on the training seed
+)
 
 
 def build_study(
@@ -67,11 +70,10 @@ def main() -> None:
     parser.add_argument("--out", type=Path, default=Path("data/ordering"))
     parser.add_argument("--pool-tokens", type=int, default=cfg.max_steps * cfg.total_batch_size)
     parser.add_argument("--val-tokens", type=int, default=VAL_TOKENS)
-    parser.add_argument("--seed", type=int, default=cfg.seed)
     args = parser.parse_args()
     tokenizer = tiktoken.get_encoding("gpt2")
     rows = load_dataset(EDU, name="sample-10BT", split="train", streaming=True).shuffle(
-        seed=args.seed, buffer_size=STREAM_BUFFER
+        seed=DATA_SEED, buffer_size=STREAM_BUFFER
     )
     build_study(
         rows,
@@ -79,7 +81,7 @@ def main() -> None:
         args.out,
         args.pool_tokens,
         args.val_tokens,
-        args.seed,
+        DATA_SEED,
     )
 
 
