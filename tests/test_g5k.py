@@ -97,7 +97,8 @@ def test_chain_main_prints_the_verdict(tmp_path, monkeypatch, capsys):
 # clusters: which clusters a one-GPU job can use
 
 
-def test_vram_is_read_in_mib_or_gb():
+def test_vram_is_read_in_bytes_mib_or_gb():
+    assert clusters.vram_gb(48_000_000_000) == 48
     assert clusters.vram_gb(20480) == 20
     assert clusters.vram_gb(24) == 24
 

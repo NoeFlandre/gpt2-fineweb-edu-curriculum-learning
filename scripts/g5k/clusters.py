@@ -34,8 +34,12 @@ class Cluster:
 
 
 def vram_gb(memory: float) -> float:
-    """The GPU memory in GB; the API reports MiB, and small values are already GB."""
-    return memory / 1024 if memory > 1024 else float(memory)
+    """The GPU memory in GB. The API reports bytes; MiB and GB values are also accepted."""
+    if memory > 1e9:
+        return memory / 1e9
+    if memory > 1024:
+        return memory / 1024
+    return float(memory)
 
 
 def usable(cluster: dict, nodes: list[dict], free_nodes: int) -> Cluster | None:
