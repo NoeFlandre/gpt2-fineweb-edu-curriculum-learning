@@ -12,6 +12,7 @@ source scripts/g5k/common.sh
 
 seed=${SEED:?set SEED, for example SEED=43}
 [[ "$seed" =~ ^[0-9]+$ ]] || { echo "SEED must be a number" >&2; exit 2; }
+rid=$(run_id "$seed")
 WALLTIME=${WALLTIME:-24:00}
 QUEUE=${QUEUE:-abaca}  # abaca, or besteffort where this account has no production access
 [[ "$QUEUE" = abaca || "$QUEUE" = besteffort ]] || { echo "QUEUE must be abaca or besteffort" >&2; exit 2; }
@@ -49,7 +50,7 @@ fi
 # One environment job at a time per site: it rewrites the shared environment archive.
 busy_prefixes=(gpt2-prep-)
 for arm in "${arms[@]}"; do
-  busy_prefixes+=("gpt2-$arm-seed$seed-")
+  busy_prefixes+=("gpt2-$arm-$rid-")
 done
 if busy=$(python3 -m scripts.g5k.status --busy "${busy_prefixes[@]}"); then
   :
@@ -68,12 +69,12 @@ if [ "$(cat "$GPT2_HOME/READY" 2>/dev/null || true)" != "$(fingerprint)" ]; then
 fi
 
 for arm in "${arms[@]}"; do
-  rm -f "$GPT2_HOME/state/$arm-seed$seed.json" "$GPT2_HOME/state/$arm-seed$seed.next"
+  rm -f "$GPT2_HOME/state/$arm-$rid.json" "$GPT2_HOME/state/$arm-$rid.next"
   dependency=()
   if [ -n "$prep" ]; then
     dependency=(-a "$prep")
   fi
-  head=$(submit_job "gpt2-$arm-seed$seed-$cluster" "$QUEUE" "cluster='$cluster'" "gpu=1,walltime=$WALLTIME" \
+  head=$(submit_job "gpt2-$arm-$rid-$cluster" "$QUEUE" "cluster='$cluster'" "gpu=1,walltime=$WALLTIME" \
     "bash scripts/g5k/train_arm.sh $arm $cluster $WALLTIME $seed $QUEUE" ${dependency[@]+"${dependency[@]}"})
   echo "$arm seed $seed on $cluster: job $head"
 done

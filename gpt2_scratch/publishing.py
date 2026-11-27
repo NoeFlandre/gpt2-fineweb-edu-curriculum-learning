@@ -74,6 +74,6 @@ FINAL_FILES = (CHECKPOINT, "model.pt", "config.json", METRICS)
 def publish_final(api, repo: str, run: str, out_dir: Path) -> None:
     """Upload a finished run's checkpoint, weights, configuration and metrics in one commit.
 
-    run is the folder in the repository, such as seed42/shuffle.
+    run is the folder in the repository, such as init42-data42/shuffle.
     """
     _commit(api, repo, run, out_dir, FINAL_FILES, f"{run}: final checkpoint, weights and metrics")

@@ -4,7 +4,8 @@
 set -euo pipefail
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 SEED=${SEED:-42}
-runs="runs/seed$SEED"
+run=$(uv run python -c "from gpt2_scratch.experiment.naming import run_id; print(run_id($SEED))")
+runs="runs/$run"
 
 if [ ! -f data/ordering/validation/val_000000.npy ]; then
   uv run python -m scripts.prepare_data --out data/ordering

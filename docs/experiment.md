@@ -48,7 +48,7 @@ tokens per parameter.
 | Optimizer | AdamW, weight decay 0.1 on matrices |
 | Learning rate | Peak 6e-4, 18 warmup steps (about 1% of the run), cosine decay to 6e-5 |
 | Precision | bf16 autocast, `torch.compile` on the training forward |
-| Seed | 42 |
+| Seed | 42 to 47 for the model initialization; the data is fixed at seed 42 |
 
 ## Evaluation
 
@@ -66,13 +66,16 @@ Evaluated every 50 steps and after the last step, 36 points per arm.
 
 ## Checkpoints
 
-A checkpoint is saved every 100 steps and uploaded to the model repository with the metrics so far;
-the local copy is then deleted, so no checkpoint is kept on the machine. An interrupted run resumes
-from the last checkpoint in the repository, on the same data, and the curves stay whole.
+A checkpoint is saved every 100 steps. On the laptop, each one is uploaded to the model repository as it
+is saved. On Grid'5000, checkpoints stay on the site's disk while the run trains, and the final files are
+uploaded once, at the end. Either way, an interrupted run resumes from its last checkpoint, on the same
+data, and the curves stay whole.
 
 ## Limitations
 
-- One seed per arm. Differences smaller than seed-to-seed noise cannot be resolved.
+- Six seeds per arm (42 to 47). The seed sets the model initialization only, so the spread across seeds
+  measures initialization noise, and the data order is not varied. Differences smaller than seed-to-seed
+  noise cannot be resolved.
 - The pool and the validation buckets come from the same FineWeb-Edu stream. Together they draw about
   900M tokens through a 10,000-document shuffle buffer, roughly 1.3 of the sample's 14 files. They
   test generalization within that slice, not to other web text.

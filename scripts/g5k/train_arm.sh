@@ -2,7 +2,7 @@
 # One link of an arm's training chain on one GPU, for one seed. Queued by launch.sh for the first link,
 # then by each link for its successor. The checkpoint stays on the site's disk, so each link resumes
 # from there. When training ends, the checkpoint, weights and metrics are published once to the
-# Hugging Face model repository under runs/seedSEED/ARM, and deleted from the site.
+# Hugging Face model repository under runs/<run id>/ARM, and deleted from the site.
 #
 # Usage: bash scripts/g5k/train_arm.sh ARM CLUSTER WALLTIME SEED
 set -euo pipefail
@@ -11,8 +11,9 @@ source scripts/g5k/common.sh
 load_hf_token
 
 arm=$1 cluster=$2 walltime=$3 seed=$4 queue=${5:-abaca}
-key="$arm-seed$seed"
-run="runs/seed$seed/$arm"
+rid=$(run_id "$seed")
+key="$arm-$rid"
+run="runs/$rid/$arm"
 data="data/ordering"
 state="$GPT2_HOME/state/$key.json"
 successor="$GPT2_HOME/state/$key.next"

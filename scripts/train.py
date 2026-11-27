@@ -1,6 +1,6 @@
 """Train one ordering arm, tracking curves in Trackio and keeping its checkpoints on the Hub.
 
-Example: python -m scripts.train --arm cooldown --seed 42 --out runs/seed42/cooldown
+Example: python -m scripts.train --arm cooldown --seed 42 --out runs/init42-data42/cooldown
 
 If the output folder has no checkpoint, the one published for this arm is downloaded first, so an
 interrupted run resumes from the Hub. Pass --no-hub to keep everything local.
@@ -14,6 +14,7 @@ import tiktoken
 import torch
 from gpt2_scratch.evaluation.multiple_choice import load_examples
 from gpt2_scratch.experiment.arms import ORDERINGS
+from gpt2_scratch.experiment.naming import run_id
 from gpt2_scratch.model.config import STUDY_CONFIG
 from gpt2_scratch.publishing import MODEL_REPO, fetch_checkpoint, publish_checkpoint
 from gpt2_scratch.training.config import TrainConfig
@@ -103,14 +104,14 @@ def main() -> None:
         seed=args.seed,
     )
     model_config = STUDY_CONFIG
-    run = f"seed{args.seed}/{args.arm}"
+    run = f"{run_id(args.seed)}/{args.arm}"
     if not args.no_hub:
         _prepare_hub(args.repo, run, args.out)
     tracker = None
     if args.dashboard == "trackio":
         tracker = TrackioTracker.start(
             project=args.project,
-            name=f"{args.arm}-seed{args.seed}",
+            name=f"{args.arm}-{run_id(args.seed)}",
             config={"arm": args.arm, "train": asdict(cfg), "model": asdict(model_config)},
             space_id=args.space,
             bucket_id=args.bucket,

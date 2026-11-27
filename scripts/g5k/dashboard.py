@@ -35,6 +35,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pyarrow.parquet as pq
+from gpt2_scratch.experiment.naming import run_id
 from gpt2_scratch.model.config import STUDY_CONFIG
 from gpt2_scratch.training.config import TrainConfig
 from gpt2_scratch.training.tracking import (
@@ -122,9 +123,9 @@ def _seed_records(metrics_file: Path) -> list[tuple[int, dict]]:
 
 
 def site_runs(root: Path, seed: int) -> list[Run]:
-    """The runs of one training seed, read from the metrics files under root/seed<N>/<arm>/."""
+    """The runs of one training seed, read from the metrics files under root/<run id>/<arm>/."""
     runs = []
-    for folder in sorted((root / f"seed{seed}").glob("*")):
+    for folder in sorted((root / run_id(seed)).glob("*")):
         metrics_file = folder / "metrics.jsonl"
         if not metrics_file.exists():
             continue
@@ -133,7 +134,7 @@ def site_runs(root: Path, seed: int) -> list[Run]:
             "train": asdict(TrainConfig(seed=seed)),
             "model": asdict(STUDY_CONFIG),
         }
-        runs.append(Run(f"{folder.name}-seed{seed}", config, _seed_records(metrics_file)))
+        runs.append(Run(f"{folder.name}-{run_id(seed)}", config, _seed_records(metrics_file)))
     return runs
 
 

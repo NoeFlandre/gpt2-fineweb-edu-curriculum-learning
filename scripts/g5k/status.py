@@ -51,7 +51,7 @@ def job_id(job: dict) -> str:
 def report(runs: Path, jobs: list[dict], finished_dir: Path = FINISHED_DIR) -> str:
     """One line per run with its last step and validation loss, then the live jobs."""
     lines = []
-    for run in sorted(p for p in runs.glob("seed*/*") if p.is_dir()):
+    for run in sorted(p for p in runs.glob("init*-data*/*") if p.is_dir()):
         label = f"{run.name}-{run.parent.name}"
         parsed = read_records(run / METRICS)
         step = last_step(parsed)

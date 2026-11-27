@@ -431,7 +431,7 @@ def test_main_resumes_from_the_hub_checkpoint_and_publishes_its_checkpoints(
 
     assert published == [100]
     assert hub.events == [("create", MODEL_REPO, "model", True), "fetch"]
-    assert "resuming seed42/shuffle" in capsys.readouterr().out
+    assert "resuming init42-data42/shuffle" in capsys.readouterr().out
 
 
 def test_dashboard_none_skips_trackio_and_trains_without_a_tracker(monkeypatch, tmp_path):

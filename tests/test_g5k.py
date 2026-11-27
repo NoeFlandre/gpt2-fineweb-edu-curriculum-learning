@@ -239,20 +239,20 @@ def test_job_ids_fall_back_to_the_id_key_then_a_placeholder():
 
 def test_report_shows_each_arm_and_the_live_jobs(tmp_path):
     write_metrics(
-        tmp_path / "runs" / "seed42" / "shuffle" / "metrics.jsonl",
+        tmp_path / "runs" / "init42-data42" / "shuffle" / "metrics.jsonl",
         {"step": 0},
         {"step": 1716, "val_loss": 4.001},
     )
     (tmp_path / "state").mkdir()
-    (tmp_path / "state" / "shuffle-seed42.done").write_text("")
-    write_metrics(tmp_path / "runs" / "seed43" / "cooldown" / "metrics.jsonl", {"step": 300})
+    (tmp_path / "state" / "shuffle-init42-data42.done").write_text("")
+    write_metrics(tmp_path / "runs" / "init43-data42" / "cooldown" / "metrics.jsonl", {"step": 300})
     jobs = [{"Job_Id": 9, "name": "gpt2-cooldown-gros", "state": "Waiting"}]
 
     text = status.report(tmp_path / "runs", jobs, tmp_path / "state")
 
-    assert "shuffle-seed42" in text
+    assert "shuffle-init42-data42" in text
     assert "step  1716  val_loss  4.001  published" in text
-    assert "cooldown-seed43" in text
+    assert "cooldown-init43-data42" in text
     assert "step   300" in text
     assert "job 9  gpt2-cooldown-gros  Waiting" in text
 
@@ -321,7 +321,7 @@ def test_status_main_prints_the_report(tmp_path, monkeypatch, capsys):
 def test_publish_uploads_the_finished_arm_and_removes_its_weights(tmp_path, monkeypatch, capsys):
     from scripts.g5k import publish
 
-    out = tmp_path / "runs" / "seed42" / "shuffle"
+    out = tmp_path / "runs" / "init42-data42" / "shuffle"
     out.mkdir(parents=True)
     (out / "checkpoint.pt").write_bytes(b"state")
     (out / "model.pt").write_bytes(b"weights")
@@ -350,11 +350,16 @@ def test_publish_uploads_the_finished_arm_and_removes_its_weights(tmp_path, monk
 
     publish.main()
 
-    assert sent == {"api": "api", "repo": "user/repo", "run": "seed42/shuffle", "folder": out}
+    assert sent == {
+        "api": "api",
+        "repo": "user/repo",
+        "run": "init42-data42/shuffle",
+        "folder": out,
+    }
     assert not (out / "checkpoint.pt").exists()
     assert not (out / "model.pt").exists()
     assert not (out / "config.json").exists()
-    assert "published seed42/shuffle to user/repo" in capsys.readouterr().out
+    assert "published init42-data42/shuffle to user/repo" in capsys.readouterr().out
 
 
 # dashboard: rebuild the Trackio dashboard from every run, without overwriting anything silently
@@ -408,7 +413,7 @@ def test_metric_values_skip_identifiers_and_missing_values():
     row = {
         "id": 1,
         "run_id": "r",
-        "run_name": "shuffle-seed42",
+        "run_name": "shuffle-init42-data42",
         "step": 50,
         "val_loss": 4.0,
         "train_loss": float("nan"),
@@ -422,26 +427,37 @@ def test_metric_values_skip_identifiers_and_missing_values():
 def test_bucket_runs_rebuild_each_run_from_the_bucket_files():
     from scripts.g5k import dashboard
 
-    runs_json = [{"name": "shuffle-seed42"}, {"name": "cooldown-seed42"}]
+    runs_json = [{"name": "shuffle-init42-data42"}, {"name": "cooldown-init42-data42"}]
     configs = [
-        {"run_name": "shuffle-seed42", "arm": "shuffle", "train": {"seed": 42}, "model": {"n": 1}},
         {
-            "run_name": "cooldown-seed42",
+            "run_name": "shuffle-init42-data42",
+            "arm": "shuffle",
+            "train": {"seed": 42},
+            "model": {"n": 1},
+        },
+        {
+            "run_name": "cooldown-init42-data42",
             "arm": "cooldown",
             "train": {"seed": 42},
             "model": {"n": 1},
         },
     ]
     metrics = [
-        {"run_name": "shuffle-seed42", "step": 100, "train_loss": 3.0, "run_id": "a", "id": 2},
-        {"run_name": "shuffle-seed42", "step": 50, "val_loss": 4.0, "run_id": "a", "id": 1},
-        {"run_name": "shuffle-seed42", "step": 60, "train_loss": None},
+        {
+            "run_name": "shuffle-init42-data42",
+            "step": 100,
+            "train_loss": 3.0,
+            "run_id": "a",
+            "id": 2,
+        },
+        {"run_name": "shuffle-init42-data42", "step": 50, "val_loss": 4.0, "run_id": "a", "id": 1},
+        {"run_name": "shuffle-init42-data42", "step": 60, "train_loss": None},
     ]
 
     runs = dashboard.bucket_runs(runs_json, configs, metrics)
 
     assert runs[0] == dashboard.Run(
-        "shuffle-seed42",
+        "shuffle-init42-data42",
         {"arm": "shuffle", "train": {"seed": 42}, "model": {"n": 1}},
         [(50, {"val_loss": 4.0}), (100, {"train_loss": 3.0})],
     )
@@ -451,15 +467,17 @@ def test_bucket_runs_rebuild_each_run_from_the_bucket_files():
 def test_site_runs_read_each_arm_of_a_seed_and_skip_a_cut_line(tmp_path):
     from scripts.g5k import dashboard
 
-    write_metrics(tmp_path / "seed43" / "shuffle" / "metrics.jsonl", {"step": 50, "val_loss": 4.0})
-    with (tmp_path / "seed43" / "shuffle" / "metrics.jsonl").open("a") as file:
+    write_metrics(
+        tmp_path / "init43-data42" / "shuffle" / "metrics.jsonl", {"step": 50, "val_loss": 4.0}
+    )
+    with (tmp_path / "init43-data42" / "shuffle" / "metrics.jsonl").open("a") as file:
         file.write('{"step": 100, "tra')
-    write_metrics(tmp_path / "seed43" / "ascending" / "metrics.jsonl", {"step": 0})
-    (tmp_path / "seed43" / "empty").mkdir()
+    write_metrics(tmp_path / "init43-data42" / "ascending" / "metrics.jsonl", {"step": 0})
+    (tmp_path / "init43-data42" / "empty").mkdir()
 
     runs = dashboard.site_runs(tmp_path, 43)
 
-    assert [run.name for run in runs] == ["ascending-seed43", "shuffle-seed43"]
+    assert [run.name for run in runs] == ["ascending-init43-data42", "shuffle-init43-data42"]
     shuffle = runs[1]
     assert shuffle.config["arm"] == "shuffle"
     assert shuffle.config["train"]["seed"] == 43
@@ -470,20 +488,20 @@ def test_merged_replaces_a_run_the_site_also_has_and_keeps_the_rest():
     from scripts.g5k import dashboard
 
     bucket = [
-        dashboard.Run("shuffle-seed42", {}, []),
-        dashboard.Run("shuffle-seed43", {"v": 1}, []),
+        dashboard.Run("shuffle-init42-data42", {}, []),
+        dashboard.Run("shuffle-init43-data42", {"v": 1}, []),
     ]
     sites = [
-        dashboard.Run("shuffle-seed43", {"v": 2}, []),
-        dashboard.Run("ascending-seed43", {}, []),
+        dashboard.Run("shuffle-init43-data42", {"v": 2}, []),
+        dashboard.Run("ascending-init43-data42", {}, []),
     ]
 
     names = [(run.name, run.config) for run in dashboard.merged(bucket, sites)]
 
     assert names == [
-        ("shuffle-seed42", {}),
-        ("shuffle-seed43", {"v": 2}),
-        ("ascending-seed43", {}),
+        ("shuffle-init42-data42", {}),
+        ("shuffle-init43-data42", {"v": 2}),
+        ("ascending-init43-data42", {}),
     ]
 
 
@@ -506,12 +524,12 @@ def test_write_dashboard_logs_every_run_then_syncs_once(monkeypatch):
             calls.append(("sync", project, space_id, bucket_id, sdk, private))
 
     monkeypatch.setitem(sys.modules, "trackio", FakeTrackio())
-    run = dashboard.Run("shuffle-seed43", {"arm": "shuffle"}, [(50, {"val_loss": 4.0})])
+    run = dashboard.Run("shuffle-init43-data42", {"arm": "shuffle"}, [(50, {"val_loss": 4.0})])
 
     dashboard.write_dashboard([run], "proj", "space", "bucket")
 
     assert calls == [
-        ("init", "proj", "shuffle-seed43", {"arm": "shuffle"}),
+        ("init", "proj", "shuffle-init43-data42", {"arm": "shuffle"}),
         ("log", {"val_loss": 4.0}, 50),
         ("finish",),
         ("sync", "proj", "space", "bucket", "static", False),
@@ -529,13 +547,13 @@ def stub_rebuild(monkeypatch, events):
     monkeypatch.setattr(
         dashboard,
         "fetch",
-        lambda _bucket, _name, _token: json.dumps([{"name": "cooldown-seed42"}]).encode(),
+        lambda _bucket, _name, _token: json.dumps([{"name": "cooldown-init42-data42"}]).encode(),
     )
     tables = {
         "aux/configs.parquet": [
-            {"run_name": "cooldown-seed42", "arm": "cooldown", "train": {}, "model": {}}
+            {"run_name": "cooldown-init42-data42", "arm": "cooldown", "train": {}, "model": {}}
         ],
-        "metrics.parquet": [{"run_name": "cooldown-seed42", "step": 0, "val_loss": 5.0}],
+        "metrics.parquet": [{"run_name": "cooldown-init42-data42", "step": 0, "val_loss": 5.0}],
     }
     monkeypatch.setattr(dashboard, "_read_parquet", lambda _bucket, name, _token: tables[name])
     monkeypatch.setattr(
@@ -550,7 +568,9 @@ def stub_rebuild(monkeypatch, events):
 def test_dashboard_main_backs_up_then_rebuilds_with_the_site_runs(monkeypatch, tmp_path, capsys):
     from scripts.g5k import dashboard
 
-    write_metrics(tmp_path / "seed43" / "shuffle" / "metrics.jsonl", {"step": 50, "val_loss": 4.0})
+    write_metrics(
+        tmp_path / "init43-data42" / "shuffle" / "metrics.jsonl", {"step": 50, "val_loss": 4.0}
+    )
     events = []
     stub_rebuild(monkeypatch, events)
     monkeypatch.setattr("sys.argv", ["dashboard.py", "--runs", str(tmp_path), "--seeds", "43"])
@@ -558,14 +578,16 @@ def test_dashboard_main_backs_up_then_rebuilds_with_the_site_runs(monkeypatch, t
     dashboard.main()
 
     assert events[0][0] == "backup"
-    assert events[1] == ("write", ["cooldown-seed42", "shuffle-seed43"])
+    assert events[1] == ("write", ["cooldown-init42-data42", "shuffle-init43-data42"])
     assert "dashboard rebuilt with 2 runs" in capsys.readouterr().out
 
 
 def test_dashboard_main_without_backup_rebuilds_under_the_site_lock(monkeypatch, tmp_path, capsys):
     from scripts.g5k import dashboard
 
-    write_metrics(tmp_path / "seed43" / "shuffle" / "metrics.jsonl", {"step": 50, "val_loss": 4.0})
+    write_metrics(
+        tmp_path / "init43-data42" / "shuffle" / "metrics.jsonl", {"step": 50, "val_loss": 4.0}
+    )
     events = []
     stub_rebuild(monkeypatch, events)
     monkeypatch.setattr(
@@ -574,7 +596,7 @@ def test_dashboard_main_without_backup_rebuilds_under_the_site_lock(monkeypatch,
 
     dashboard.main()
 
-    assert events == [("write", ["cooldown-seed42", "shuffle-seed43"])]
+    assert events == [("write", ["cooldown-init42-data42", "shuffle-init43-data42"])]
     assert (tmp_path / ".dashboard.lock").exists()
     assert "dashboard rebuilt with 2 runs\n" in capsys.readouterr().out
 
@@ -671,11 +693,11 @@ def test_read_parquet_turns_a_bucket_table_into_rows(monkeypatch):
     from scripts.g5k import dashboard
 
     buffer = io.BytesIO()
-    pq.write_table(pa.table({"run_name": ["shuffle-seed42"], "step": [50]}), buffer)
+    pq.write_table(pa.table({"run_name": ["shuffle-init42-data42"], "step": [50]}), buffer)
     monkeypatch.setattr(dashboard, "fetch", lambda _bucket, _name, _token: buffer.getvalue())
 
     assert dashboard._read_parquet("user/bucket", "metrics.parquet", None) == [
-        {"run_name": "shuffle-seed42", "step": 50}
+        {"run_name": "shuffle-init42-data42", "step": 50}
     ]
 
 
@@ -716,10 +738,10 @@ def test_package_modules_are_run_as_modules_so_their_imports_resolve():
 
 def test_chains_on_counts_each_live_chain_once_per_cluster():
     jobs = [
-        {"name": "gpt2-shuffle-seed44-kinovis", "state": "Running"},
-        {"name": "gpt2-shuffle-seed44-kinovis", "state": "Waiting"},
-        {"name": "gpt2-ascending-seed44-kinovis", "state": "Waiting"},
-        {"name": "gpt2-cooldown-seed43-vercors9", "state": "Running"},
+        {"name": "gpt2-shuffle-init44-data42-kinovis", "state": "Running"},
+        {"name": "gpt2-shuffle-init44-data42-kinovis", "state": "Waiting"},
+        {"name": "gpt2-ascending-init44-data42-kinovis", "state": "Waiting"},
+        {"name": "gpt2-cooldown-init43-data42-vercors9", "state": "Running"},
         {"name": "gpt2-prep-kinovis", "state": "Error"},
     ]
 
@@ -731,7 +753,7 @@ def test_status_prints_the_chain_count_for_a_cluster(monkeypatch, capsys):
     monkeypatch.setattr(
         status,
         "oarstat_jobs",
-        lambda: [{"name": "gpt2-shuffle-seed44-kinovis", "state": "Running"}],
+        lambda: [{"name": "gpt2-shuffle-init44-data42-kinovis", "state": "Running"}],
     )
     monkeypatch.setattr("sys.argv", ["status.py", "--chains", "kinovis"])
 

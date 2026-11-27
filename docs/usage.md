@@ -10,7 +10,7 @@
 
 The seed sets only the model initialization. The data (the pool, the four document orders and the
 validation split) is built once with a fixed seed of 42, so every training seed sees the same data. Each
-training seed has its own runs folder, `runs/seed<N>/<order>/`. `scripts/run_experiment.sh` takes `SEED`
+training seed has its own runs folder, `runs/init<N>-data42/<order>/`. `scripts/run_experiment.sh` takes `SEED`
 (default 42).
 
 ## Build the data
@@ -27,17 +27,17 @@ uv run python -m scripts.prepare_benchmarks --out data/benchmarks
 ## Train one arm
 
 ```bash
-uv run python -m scripts.train --arm cooldown --seed 42 --data data/ordering --out runs/seed42/cooldown
+uv run python -m scripts.train --arm cooldown --seed 42 --data data/ordering --out runs/init42-data42/cooldown
 ```
 
-Writes `metrics.jsonl`, `model.pt` and `config.json` into `runs/seed42/cooldown`. Each checkpoint is uploaded
+Writes `metrics.jsonl`, `model.pt` and `config.json` into `runs/init42-data42/cooldown`. Each checkpoint is uploaded
 to the model repository and its local copy deleted; pass `--no-hub` to keep checkpoints local
 instead.
 
 ## Plot and upload
 
 ```bash
-uv run python -m scripts.report --runs runs/seed42 --out runs/seed42/figures
+uv run python -m scripts.report --runs runs/init42-data42 --out runs/init42-data42/figures
 uv run python -m scripts.upload --runs runs
 ```
 
