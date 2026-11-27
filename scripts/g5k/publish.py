@@ -6,7 +6,7 @@ Usage: python -m scripts.g5k.publish --arm ARM --seed SEED --out runs/<run id>/A
 import argparse
 from pathlib import Path
 
-from gpt2_scratch.experiment.naming import run_id
+from gpt2_scratch.experiment.naming import DATA_SEED, run_id
 from gpt2_scratch.publishing import MODEL_REPO, publish_final
 from huggingface_hub import HfApi
 
@@ -18,10 +18,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arm", required=True)
     parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument("--data-seed", type=int, default=DATA_SEED)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--repo", default=MODEL_REPO)
     args = parser.parse_args()
-    run = f"{run_id(args.seed)}/{args.arm}"
+    run = f"{run_id(args.seed, args.data_seed)}/{args.arm}"
     publish_final(HfApi(), args.repo, run, args.out)
     for name in LOCAL_FILES:
         (args.out / name).unlink()

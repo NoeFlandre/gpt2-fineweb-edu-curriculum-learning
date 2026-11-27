@@ -14,7 +14,7 @@ import tiktoken
 import torch
 from gpt2_scratch.evaluation.multiple_choice import load_examples
 from gpt2_scratch.experiment.arms import ORDERINGS
-from gpt2_scratch.experiment.naming import run_id
+from gpt2_scratch.experiment.naming import DATA_SEED, run_id
 from gpt2_scratch.model.config import STUDY_CONFIG
 from gpt2_scratch.publishing import MODEL_REPO, fetch_checkpoint, publish_checkpoint
 from gpt2_scratch.training.config import TrainConfig
@@ -37,7 +37,7 @@ def parse_args() -> argparse.Namespace:
     """Read the command-line options."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arm", required=True, choices=ORDERINGS)
-    parser.add_argument("--data", type=Path, default=Path("data/ordering"))
+    parser.add_argument("--data", type=Path, help="data folder (default: data/data<data seed>)")
     parser.add_argument("--benchmarks", type=Path, default=Path("data/benchmarks"))
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -58,7 +58,13 @@ def parse_args() -> argparse.Namespace:
         "--seed",
         type=int,
         default=defaults.seed,
-        help="model initialization seed (the data is fixed)",
+        help="model initialization seed",
+    )
+    parser.add_argument(
+        "--data-seed",
+        type=int,
+        default=DATA_SEED,
+        help="seed of the data: the pool, the orders and the validation split",
     )
     parser.add_argument("--total-tokens", type=int, default=defaults.total_tokens, help=SMOKE)
     parser.add_argument("--eval-every", type=int, default=defaults.eval_every, help=SMOKE)
@@ -104,27 +110,28 @@ def main() -> None:
         seed=args.seed,
     )
     model_config = STUDY_CONFIG
-    run = f"{run_id(args.seed)}/{args.arm}"
+    data = args.data or Path(f"data/data{args.data_seed}")
+    run = f"{run_id(args.seed, args.data_seed)}/{args.arm}"
     if not args.no_hub:
         _prepare_hub(args.repo, run, args.out)
     tracker = None
     if args.dashboard == "trackio":
         tracker = TrackioTracker.start(
             project=args.project,
-            name=f"{args.arm}-{run_id(args.seed)}",
+            name=f"{args.arm}-{run_id(args.seed, args.data_seed)}",
             config={"arm": args.arm, "train": asdict(cfg), "model": asdict(model_config)},
             space_id=args.space,
             bucket_id=args.bucket,
             group=args.arm,
         )
     elif args.dashboard == "site":
-        tracker = SiteDashboard(args.seed)
+        tracker = SiteDashboard(args.seed, args.data_seed)
     try:
         summary = train(
             cfg,
             args.arm,
             model_config,
-            args.data,
+            data,
             args.out,
             args.device,
             benchmarks=load_benchmarks(args.benchmarks),

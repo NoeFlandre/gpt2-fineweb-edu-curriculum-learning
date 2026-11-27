@@ -505,3 +505,52 @@ def test_dashboard_site_rebuilds_the_seed_as_it_trains(monkeypatch, tmp_path):
 
     assert isinstance(seen["tracker"], SiteDashboard)
     assert seen["tracker"].seed == 43
+    assert seen["tracker"].data_seed == 42
+
+
+def test_data_seed_picks_the_data_folder_and_the_run_name(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    seen = {}
+
+    class NamingTracker:
+        @classmethod
+        def start(cls, name, **_kwargs):
+            seen["name"] = name
+            return cls()
+
+        def log(self, metrics, step):
+            pass
+
+        def finish(self):
+            pass
+
+    def fake_train(_cfg, _arm, _model_config, data, *_args, **_kwargs):
+        seen["data"] = data
+        return {"steps": 0}
+
+    monkeypatch.setattr(train, "TrackioTracker", NamingTracker)
+    monkeypatch.setattr(train, "train", fake_train)
+    monkeypatch.setattr(train, "load_examples", lambda _path: [])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "train",
+            "--arm",
+            "shuffle",
+            "--seed",
+            "43",
+            "--data-seed",
+            "7",
+            "--out",
+            str(tmp_path),
+            "--no-hub",
+            "--device",
+            "cpu",
+        ],
+    )
+
+    train.main()
+
+    assert seen == {"name": "shuffle-init43-data7", "data": Path("data/data7")}

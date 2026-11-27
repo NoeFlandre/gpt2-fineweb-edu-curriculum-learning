@@ -186,5 +186,5 @@ htmlcov/
 .mutmut-cache
 site/
 
-# Study data prepared by scripts/prepare_data.py (large)
-data/ordering/
+# Study data prepared by scripts/prepare_data.py, one folder per data seed (large)
+data/data*/

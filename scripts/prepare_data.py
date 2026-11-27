@@ -3,7 +3,7 @@
 Writes the training pool in each of the four orders, and the held-out validation split with its
 score buckets and their token counts.
 
-Example: python -m scripts.prepare_data --out data/ordering
+Example: python -m scripts.prepare_data --data-seed 43   (writes data/data43)
 """
 
 import argparse
@@ -24,14 +24,12 @@ from gpt2_scratch.data.corpus import (
 from gpt2_scratch.data.shards import save_shard
 from gpt2_scratch.data.tokenize import encode_document
 from gpt2_scratch.experiment.arms import ORDERINGS, arm_order
+from gpt2_scratch.experiment.naming import DATA_SEED
 from gpt2_scratch.training.config import TrainConfig
 
 EDU = "HuggingFaceFW/fineweb-edu"
 VAL_TOKENS = 2_000_000
 STREAM_BUFFER = 10_000
-DATA_SEED = (
-    42  # fixed: the pool, the orders and the validation split never depend on the training seed
-)
 
 
 def build_study(
@@ -64,24 +62,31 @@ def build_study(
 
 
 def main() -> None:
-    """Stream FineWeb-Edu and build the study's data."""
+    """Stream FineWeb-Edu and build the study's data for one data seed."""
     cfg = TrainConfig()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", type=Path, default=Path("data/ordering"))
+    parser.add_argument(
+        "--data-seed",
+        type=int,
+        default=DATA_SEED,
+        help="seed of the pool, the orders and the validation split",
+    )
+    parser.add_argument("--out", type=Path, help="default: data/data<data seed>")
     parser.add_argument("--pool-tokens", type=int, default=cfg.max_steps * cfg.total_batch_size)
     parser.add_argument("--val-tokens", type=int, default=VAL_TOKENS)
     args = parser.parse_args()
+    out = args.out or Path(f"data/data{args.data_seed}")
     tokenizer = tiktoken.get_encoding("gpt2")
     rows = load_dataset(EDU, name="sample-10BT", split="train", streaming=True).shuffle(
-        seed=DATA_SEED, buffer_size=STREAM_BUFFER
+        seed=args.data_seed, buffer_size=STREAM_BUFFER
     )
     build_study(
         rows,
         lambda text: encode_document(text, tokenizer),
-        args.out,
+        out,
         args.pool_tokens,
         args.val_tokens,
-        DATA_SEED,
+        args.data_seed,
     )
 
 

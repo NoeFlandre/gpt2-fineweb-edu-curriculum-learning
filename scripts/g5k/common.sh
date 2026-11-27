@@ -2,7 +2,7 @@
 #
 # Per-site state lives in $GPT2_HOME, outside the repository, so that uploaded runs stay clean:
 #   env/venv.tar.zst    the packed training environment (built once per site)
-#   READY               fingerprint of the code and lockfile the environment and data match
+#   READY-data<D>       fingerprint of the code and lockfile that the data of data seed D matches
 #   state/<arm>-<run id>.json   chain progress, read by chain.py
 #   state/<arm>-<run id>.next   job id of the successor queued by the last link of a chain
 #   logs/               OAR stdout and stderr
@@ -10,9 +10,10 @@
 export PATH="$HOME/.local/bin:$PATH"
 GPT2_HOME="$HOME/gpt2-g5k"
 
-# The name of a training seed's runs, from gpt2_scratch/experiment/naming.py: init<seed>-data42.
+# The name of the runs of an initialization seed and a data seed: run_id SEED DATA_SEED, such as
+# init43-data42 (gpt2_scratch/experiment/naming.py).
 run_id() {
-  python3 -c "from gpt2_scratch.experiment.naming import run_id; print(run_id($1))"
+  python3 -c "from gpt2_scratch.experiment.naming import run_id; print(run_id($1, $2))"
 }
 
 # Fingerprint of everything the environment and the study data depend on.

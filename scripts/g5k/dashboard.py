@@ -35,7 +35,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pyarrow.parquet as pq
-from gpt2_scratch.experiment.naming import run_id
+from gpt2_scratch.experiment.naming import DATA_SEED, run_id
 from gpt2_scratch.model.config import STUDY_CONFIG
 from gpt2_scratch.training.config import TrainConfig
 from gpt2_scratch.training.tracking import (
@@ -122,10 +122,10 @@ def _seed_records(metrics_file: Path) -> list[tuple[int, dict]]:
     return records
 
 
-def site_runs(root: Path, seed: int) -> list[Run]:
-    """The runs of one training seed, read from the metrics files under root/<run id>/<arm>/."""
+def site_runs(root: Path, seed: int, data_seed: int = DATA_SEED) -> list[Run]:
+    """The runs of one init seed and data seed, read from the metrics under root/<run id>/<arm>/."""
     runs = []
-    for folder in sorted((root / run_id(seed)).glob("*")):
+    for folder in sorted((root / run_id(seed, data_seed)).glob("*")):
         metrics_file = folder / "metrics.jsonl"
         if not metrics_file.exists():
             continue
@@ -134,7 +134,8 @@ def site_runs(root: Path, seed: int) -> list[Run]:
             "train": asdict(TrainConfig(seed=seed)),
             "model": asdict(STUDY_CONFIG),
         }
-        runs.append(Run(f"{folder.name}-{run_id(seed)}", config, _seed_records(metrics_file)))
+        name = f"{folder.name}-{run_id(seed, data_seed)}"
+        runs.append(Run(name, config, _seed_records(metrics_file)))
     return runs
 
 
@@ -179,9 +180,10 @@ class SiteDashboard:
     runs/.dashboard.log.
     """
 
-    def __init__(self, seed: int, runs: Path = Path("runs")) -> None:
-        """Remember the seed to publish and the folder that holds the runs."""
+    def __init__(self, seed: int, data_seed: int = DATA_SEED, runs: Path = Path("runs")) -> None:
+        """Remember the seeds to publish and the folder that holds the runs."""
         self.seed = seed
+        self.data_seed = data_seed
         self.runs = runs
         self.child: subprocess.Popen | None = None
         self.workdir = ""
@@ -216,6 +218,8 @@ class SiteDashboard:
             str(self.runs),
             "--seeds",
             str(self.seed),
+            "--data-seed",
+            str(self.data_seed),
             "--no-backup",
         ]
         with (self.runs / ".dashboard.log").open("a") as log:
@@ -247,6 +251,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs", type=Path, default=Path("runs"))
     parser.add_argument("--seeds", type=int, nargs="+", required=True)
+    parser.add_argument("--data-seed", type=int, default=DATA_SEED)
     parser.add_argument("--bucket", default=TRACKIO_BUCKET)
     parser.add_argument("--space", default=TRACKIO_SPACE)
     parser.add_argument("--project", default=TRACKIO_PROJECT)
@@ -262,7 +267,9 @@ def main() -> None:
             _read_parquet(args.bucket, "aux/configs.parquet", token),
             _read_parquet(args.bucket, "metrics.parquet", token),
         )
-        from_sites = [run for seed in args.seeds for run in site_runs(args.runs, seed)]
+        from_sites = [
+            run for seed in args.seeds for run in site_runs(args.runs, seed, args.data_seed)
+        ]
         runs = merged(current, from_sites)
         write_dashboard(runs, args.project, args.space, args.bucket)
     backup = "" if args.no_backup else f" (backup: backups/{stamp}/)"

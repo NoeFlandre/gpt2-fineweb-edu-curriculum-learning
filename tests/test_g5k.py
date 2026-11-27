@@ -652,6 +652,8 @@ def test_site_dashboard_rebuilds_the_seed_at_every_fifty_training_steps(monkeypa
         str(tmp_path),
         "--seeds",
         "43",
+        "--data-seed",
+        "42",
         "--no-backup",
     ]
     assert children[0].env["TRACKIO_DIR"] == str(tmp_path / "trackio-")

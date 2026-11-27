@@ -16,19 +16,22 @@ training seed has its own runs folder, `runs/init<N>-data42/<order>/`. `scripts/
 ## Build the data
 
 ```bash
-uv run python -m scripts.prepare_data --out data/ordering
+uv run python -m scripts.prepare_data --data-seed 42
 uv run python -m scripts.prepare_benchmarks --out data/benchmarks
 ```
 
 `prepare_data` streams FineWeb-Edu and writes the training pool in each of the four orders under
-`data/ordering/arms/`, and the held-out validation split with its score buckets under
-`data/ordering/validation/` (`buckets.json` reports the tokens per bucket).
+`data/data<data seed>/arms/`, and the held-out validation split with its score buckets under
+`data/data<data seed>/validation/` (`buckets.json` reports the tokens per bucket). `--data-seed`
+(default 42) sets the pool, the orders and the validation split.
 
 ## Train one arm
 
 ```bash
-uv run python -m scripts.train --arm cooldown --seed 42 --data data/ordering --out runs/init42-data42/cooldown
+uv run python -m scripts.train --arm cooldown --seed 42 --data-seed 42 --out runs/init42-data42/cooldown
 ```
+
+`--seed` sets the model initialization. Its run is named `init<seed>-data<data seed>`.
 
 Writes `metrics.jsonl`, `model.pt` and `config.json` into `runs/init42-data42/cooldown`. Each checkpoint is uploaded
 to the model repository and its local copy deleted; pass `--no-hub` to keep checkpoints local
