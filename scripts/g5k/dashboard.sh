@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# CPU job: rebuild the Trackio dashboard from every run and publish it. The current dashboard files
-# are backed up in the bucket first (see scripts/g5k/dashboard.py).
+# CPU job: rebuild the Trackio dashboard from every run and publish it, by hand. The training links
+# keep it current on their own (scripts/g5k/dashboard.py, SiteDashboard). This job backs up the
+# bucket's dashboard files first.
 #
 # Usage: bash scripts/g5k/dashboard.sh SEED [SEED ...]
 set -euo pipefail

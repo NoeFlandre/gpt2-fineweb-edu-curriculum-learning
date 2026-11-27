@@ -26,6 +26,8 @@ from gpt2_scratch.training.tracking import (
 )
 from huggingface_hub import HfApi
 
+from scripts.g5k.dashboard import SiteDashboard
+
 BENCHMARKS = ("hellaswag", "piqa", "arc_easy")
 SMOKE = "For a smoke test only; the study uses the default"
 
@@ -41,9 +43,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo", default=MODEL_REPO, help="Model repo for checkpoints")
     parser.add_argument("--no-hub", action="store_true", help="keep checkpoints local only")
     parser.add_argument(
-        "--no-dashboard",
-        action="store_true",
-        help="do not log to Trackio: nothing is written to the dashboard bucket",
+        "--dashboard",
+        choices=("trackio", "site", "none"),
+        default="trackio",
+        help="trackio: a live Trackio run; site: every run of this seed on this site, rebuilt as "
+        "they train (Grid'5000); none: no dashboard",
     )
     parser.add_argument("--project", default=TRACKIO_PROJECT, help="Trackio project name")
     parser.add_argument("--space", default=TRACKIO_SPACE, help="Static dashboard Space")
@@ -103,7 +107,7 @@ def main() -> None:
     if not args.no_hub:
         _prepare_hub(args.repo, run, args.out)
     tracker = None
-    if not args.no_dashboard:
+    if args.dashboard == "trackio":
         tracker = TrackioTracker.start(
             project=args.project,
             name=f"{args.arm}-seed{args.seed}",
@@ -111,6 +115,8 @@ def main() -> None:
             space_id=args.space,
             bucket_id=args.bucket,
         )
+    elif args.dashboard == "site":
+        tracker = SiteDashboard(args.seed)
     try:
         summary = train(
             cfg,

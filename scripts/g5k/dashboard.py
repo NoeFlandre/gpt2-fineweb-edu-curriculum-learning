@@ -1,23 +1,35 @@
 """Rebuild the Trackio dashboard from every run, and publish it to the dashboard bucket.
 
-Training links never write to the dashboard (--no-dashboard), because a sync replaces the bucket's
-dashboard files with the content of one local database. This job builds the complete dashboard:
+A training link keeps the dashboard current as it trains (SiteDashboard). A sync replaces the
+bucket's dashboard files with the content of one local database, so every rebuild logs the complete
+dashboard:
 
 - the runs already in the bucket are read from its files (runs.json, configs and metrics parquet);
 - the runs of the given seeds are read from their metrics files on this site, and replace any run
   of the same name;
-- the bucket files are backed up under backups/<UTC time>/ first;
+- the bucket files are backed up under backups/<UTC time>/ first, unless --no-backup;
 - every run is logged into a fresh Trackio database (TRACKIO_DIR must point at an empty folder), and
   that database is synced once, so the bucket ends up with all the runs.
+
+The rebuilds of a site take turns on a lock in runs/, so one rebuild's read and write never
+interleave with another's.
 
 Usage: TRACKIO_DIR=<empty folder> python -m scripts.g5k.dashboard --runs runs --seeds 43
 """
 
 import argparse
+import fcntl
 import io
 import json
 import math
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
 import urllib.request
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,7 +37,12 @@ from pathlib import Path
 import pyarrow.parquet as pq
 from gpt2_scratch.model.config import STUDY_CONFIG
 from gpt2_scratch.training.config import TrainConfig
-from gpt2_scratch.training.tracking import TRACKIO_BUCKET, TRACKIO_PROJECT, TRACKIO_SPACE
+from gpt2_scratch.training.tracking import (
+    PUBLISH_EVERY,
+    TRACKIO_BUCKET,
+    TRACKIO_PROJECT,
+    TRACKIO_SPACE,
+)
 from huggingface_hub import HfApi, get_token
 
 from scripts.g5k.run_log import read_records
@@ -143,6 +160,87 @@ def _read_parquet(bucket: str, name: str, token: str | None) -> list[dict]:
     return pq.read_table(io.BytesIO(fetch(bucket, name, token))).to_pylist()
 
 
+@contextmanager
+def _site_lock(runs: Path) -> Generator[None]:
+    """Hold the site's dashboard lock, so that one rebuild at a time reads and writes the bucket."""
+    with (runs / ".dashboard.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+class SiteDashboard:
+    """The dashboard of one seed's runs on this site, kept current as they train.
+
+    It is a metrics Tracker. Every PUBLISH_EVERY training steps, and at the end of the run, a child
+    process rebuilds the dashboard from the metrics files of the seed's runs under runs (see main).
+    The child runs in the background, so training does not wait for it. A rebuild still running
+    when the next one is due is skipped: the next one carries its data. Output goes to
+    runs/.dashboard.log.
+    """
+
+    def __init__(self, seed: int, runs: Path = Path("runs")) -> None:
+        """Remember the seed to publish and the folder that holds the runs."""
+        self.seed = seed
+        self.runs = runs
+        self.child: subprocess.Popen | None = None
+        self.workdir = ""
+        self.where = ""
+
+    def log(self, metrics: dict, step: int) -> None:
+        """Rebuild the dashboard every PUBLISH_EVERY training steps, unless a rebuild is running."""
+        if "train_loss" in metrics and step % PUBLISH_EVERY == 0 and not self._running():
+            self._publish(f"step {step}")
+
+    def finish(self) -> None:
+        """Publish the final state of the dashboard, once the rebuild in flight is done."""
+        if self.child is not None:
+            self.child.wait()
+        child = self._publish("the end of the run")
+        child.wait()
+        self._settle()
+
+    def _running(self) -> bool:
+        return self.child is not None and self.child.poll() is None
+
+    def _publish(self, where: str) -> subprocess.Popen:
+        """Start a rebuild in a child process, with a fresh Trackio database."""
+        self._settle()
+        self.where = where
+        self.workdir = tempfile.mkdtemp(prefix="trackio-")
+        command = [
+            sys.executable,
+            "-m",
+            "scripts.g5k.dashboard",
+            "--runs",
+            str(self.runs),
+            "--seeds",
+            str(self.seed),
+            "--no-backup",
+        ]
+        with (self.runs / ".dashboard.log").open("a") as log:
+            child = subprocess.Popen(
+                command,
+                env={**os.environ, "TRACKIO_DIR": self.workdir},
+                stdout=log,
+                stderr=subprocess.STDOUT,
+            )
+        self.child = child
+        return child
+
+    def _settle(self) -> None:
+        """Report the last rebuild if it failed, and remove its database."""
+        if self.child is None:
+            return
+        if self.child.returncode != 0:
+            print(
+                f"dashboard publish deferred (exit {self.child.returncode}) at {self.where}; "
+                f"see {self.runs / '.dashboard.log'}",
+                flush=True,
+            )
+        shutil.rmtree(self.workdir, ignore_errors=True)
+        self.child = None
+
+
 def main() -> None:
     """Back up the dashboard, rebuild it with every run, and report what it now holds."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -151,19 +249,23 @@ def main() -> None:
     parser.add_argument("--bucket", default=TRACKIO_BUCKET)
     parser.add_argument("--space", default=TRACKIO_SPACE)
     parser.add_argument("--project", default=TRACKIO_PROJECT)
+    parser.add_argument("--no-backup", action="store_true", help="skip the backup of the bucket")
     args = parser.parse_args()
     token = get_token()
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    backup_bucket(args.bucket, token, stamp)
-    current = bucket_runs(
-        json.loads(fetch(args.bucket, "runs.json", token)),
-        _read_parquet(args.bucket, "aux/configs.parquet", token),
-        _read_parquet(args.bucket, "metrics.parquet", token),
-    )
-    from_sites = [run for seed in args.seeds for run in site_runs(args.runs, seed)]
-    runs = merged(current, from_sites)
-    write_dashboard(runs, args.project, args.space, args.bucket)
-    print(f"dashboard rebuilt with {len(runs)} runs (backup: backups/{stamp}/)")
+    with _site_lock(args.runs):
+        if not args.no_backup:
+            backup_bucket(args.bucket, token, stamp)
+        current = bucket_runs(
+            json.loads(fetch(args.bucket, "runs.json", token)),
+            _read_parquet(args.bucket, "aux/configs.parquet", token),
+            _read_parquet(args.bucket, "metrics.parquet", token),
+        )
+        from_sites = [run for seed in args.seeds for run in site_runs(args.runs, seed)]
+        runs = merged(current, from_sites)
+        write_dashboard(runs, args.project, args.space, args.bucket)
+    backup = "" if args.no_backup else f" (backup: backups/{stamp}/)"
+    print(f"dashboard rebuilt with {len(runs)} runs{backup}")
     for run in runs:
         print(f"  {run.name}: {len(run.records)} steps")
 

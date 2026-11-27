@@ -434,11 +434,11 @@ def test_main_resumes_from_the_hub_checkpoint_and_publishes_its_checkpoints(
     assert "resuming seed42/shuffle" in capsys.readouterr().out
 
 
-def test_no_dashboard_skips_trackio_and_trains_without_a_tracker(monkeypatch, tmp_path):
+def test_dashboard_none_skips_trackio_and_trains_without_a_tracker(monkeypatch, tmp_path):
     seen = {}
 
     def fail_start(**_kwargs):
-        msg = "Trackio must not start with --no-dashboard"
+        msg = "Trackio must not start with --dashboard none"
         raise AssertionError(msg)
 
     def fake_train(*_args, tracker, **_kwargs):
@@ -458,7 +458,8 @@ def test_no_dashboard_skips_trackio_and_trains_without_a_tracker(monkeypatch, tm
             "--out",
             str(tmp_path),
             "--no-hub",
-            "--no-dashboard",
+            "--dashboard",
+            "none",
             "--device",
             "cpu",
         ],
@@ -467,3 +468,40 @@ def test_no_dashboard_skips_trackio_and_trains_without_a_tracker(monkeypatch, tm
     train.main()
 
     assert seen == {"tracker": None}
+
+
+def test_dashboard_site_rebuilds_the_seed_as_it_trains(monkeypatch, tmp_path):
+    from scripts.g5k.dashboard import SiteDashboard
+
+    seen = {}
+    monkeypatch.setattr(SiteDashboard, "finish", lambda _self: None)  # no rebuild in a unit test
+
+    def fake_train(*_args, tracker, **_kwargs):
+        seen["tracker"] = tracker
+        return {"steps": 0}
+
+    monkeypatch.setattr(train, "train", fake_train)
+    monkeypatch.setattr(train, "load_examples", lambda _path: [])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "train",
+            "--arm",
+            "shuffle",
+            "--seed",
+            "43",
+            "--out",
+            str(tmp_path),
+            "--no-hub",
+            "--dashboard",
+            "site",
+            "--device",
+            "cpu",
+        ],
+    )
+
+    train.main()
+
+    assert isinstance(seen["tracker"], SiteDashboard)
+    assert seen["tracker"].seed == 43

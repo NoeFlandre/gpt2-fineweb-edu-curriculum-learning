@@ -518,11 +518,10 @@ def test_write_dashboard_logs_every_run_then_syncs_once(monkeypatch):
     ]
 
 
-def test_dashboard_main_backs_up_then_rebuilds_with_the_site_runs(monkeypatch, tmp_path, capsys):
+def stub_rebuild(monkeypatch, events):
+    """Stub the bucket and the writing of a rebuild, recording their calls in events."""
     from scripts.g5k import dashboard
 
-    write_metrics(tmp_path / "seed43" / "shuffle" / "metrics.jsonl", {"step": 50, "val_loss": 4.0})
-    events = []
     monkeypatch.setattr(dashboard, "get_token", lambda: "tok")
     monkeypatch.setattr(
         dashboard, "backup_bucket", lambda _bucket, _token, stamp: events.append(("backup", stamp))
@@ -546,6 +545,14 @@ def test_dashboard_main_backs_up_then_rebuilds_with_the_site_runs(monkeypatch, t
             ("write", [run.name for run in runs])
         ),
     )
+
+
+def test_dashboard_main_backs_up_then_rebuilds_with_the_site_runs(monkeypatch, tmp_path, capsys):
+    from scripts.g5k import dashboard
+
+    write_metrics(tmp_path / "seed43" / "shuffle" / "metrics.jsonl", {"step": 50, "val_loss": 4.0})
+    events = []
+    stub_rebuild(monkeypatch, events)
     monkeypatch.setattr("sys.argv", ["dashboard.py", "--runs", str(tmp_path), "--seeds", "43"])
 
     dashboard.main()
@@ -553,6 +560,109 @@ def test_dashboard_main_backs_up_then_rebuilds_with_the_site_runs(monkeypatch, t
     assert events[0][0] == "backup"
     assert events[1] == ("write", ["cooldown-seed42", "shuffle-seed43"])
     assert "dashboard rebuilt with 2 runs" in capsys.readouterr().out
+
+
+def test_dashboard_main_without_backup_rebuilds_under_the_site_lock(monkeypatch, tmp_path, capsys):
+    from scripts.g5k import dashboard
+
+    write_metrics(tmp_path / "seed43" / "shuffle" / "metrics.jsonl", {"step": 50, "val_loss": 4.0})
+    events = []
+    stub_rebuild(monkeypatch, events)
+    monkeypatch.setattr(
+        "sys.argv", ["dashboard.py", "--runs", str(tmp_path), "--seeds", "43", "--no-backup"]
+    )
+
+    dashboard.main()
+
+    assert events == [("write", ["cooldown-seed42", "shuffle-seed43"])]
+    assert (tmp_path / ".dashboard.lock").exists()
+    assert "dashboard rebuilt with 2 runs\n" in capsys.readouterr().out
+
+
+class FakeChild:
+    """A rebuild process that the test finishes by hand: its returncode is None while it runs."""
+
+    def __init__(self, command, env):
+        self.command = command
+        self.env = env
+        self.returncode = None
+
+    def poll(self):
+        return self.returncode
+
+    def wait(self):
+        self.returncode = 0 if self.returncode is None else self.returncode
+        return self.returncode
+
+
+def fake_rebuilds(monkeypatch, tmp_path):
+    """Replace the rebuild processes with FakeChild objects, and return the list they join."""
+    from scripts.g5k import dashboard
+
+    children = []
+
+    def popen(command, env, **_options):
+        child = FakeChild(command, env)
+        children.append(child)
+        return child
+
+    monkeypatch.setattr(dashboard.subprocess, "Popen", popen)
+    monkeypatch.setattr(dashboard.tempfile, "mkdtemp", lambda prefix: str(tmp_path / prefix))
+    return children
+
+
+def test_site_dashboard_rebuilds_the_seed_at_every_fifty_training_steps(monkeypatch, tmp_path):
+    from scripts.g5k import dashboard
+
+    children = fake_rebuilds(monkeypatch, tmp_path)
+    tracker = dashboard.SiteDashboard(43, runs=tmp_path)
+
+    tracker.log({"train_loss": 5.0}, step=49)
+    tracker.log({"val_loss": 4.0}, step=50)
+    tracker.log({"train_loss": 4.5}, step=50)
+
+    assert len(children) == 1
+    assert children[0].command == [
+        sys.executable,
+        "-m",
+        "scripts.g5k.dashboard",
+        "--runs",
+        str(tmp_path),
+        "--seeds",
+        "43",
+        "--no-backup",
+    ]
+    assert children[0].env["TRACKIO_DIR"] == str(tmp_path / "trackio-")
+
+
+def test_site_dashboard_skips_a_rebuild_still_running_and_reports_a_failed_one(
+    monkeypatch, tmp_path, capsys
+):
+    from scripts.g5k import dashboard
+
+    children = fake_rebuilds(monkeypatch, tmp_path)
+    tracker = dashboard.SiteDashboard(43, runs=tmp_path)
+
+    tracker.log({"train_loss": 4.5}, step=50)
+    tracker.log({"train_loss": 4.4}, step=100)  # the rebuild of step 50 is still running
+    assert len(children) == 1
+
+    children[0].returncode = 1  # it failed: reported, then the next rebuild starts
+    tracker.log({"train_loss": 4.3}, step=150)
+    tracker.finish()  # waits for the last rebuild, then publishes the final state
+
+    assert len(children) == 3
+    assert "dashboard publish deferred (exit 1) at step 50" in capsys.readouterr().out
+
+
+def test_site_dashboard_publishes_the_final_state_when_the_run_ends(monkeypatch, tmp_path):
+    from scripts.g5k import dashboard
+
+    children = fake_rebuilds(monkeypatch, tmp_path)
+
+    dashboard.SiteDashboard(43, runs=tmp_path).finish()
+
+    assert [child.command[-1] for child in children] == ["--no-backup"]
 
 
 def test_read_parquet_turns_a_bucket_table_into_rows(monkeypatch):
