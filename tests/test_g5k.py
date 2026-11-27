@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 import pytest
-from scripts.g5k import chain, clusters, run_log, status
+from scripts.g5k import chain, clusters, status
 
 A4500 = {"gpu_devices": {"0": {"model": "NVIDIA RTX A4500", "memory": 20480}}}
 
@@ -210,14 +210,6 @@ def test_live_jobs_accept_a_list():
     assert status.live_jobs([{"name": "a", "state": "Waiting"}]) == [
         {"name": "a", "state": "Waiting"}
     ]
-
-
-def test_status_reads_no_records_without_a_file(tmp_path):
-    path = tmp_path / "metrics.jsonl"
-    path.write_text('{"step": 1}\n{"step": 2')
-
-    assert run_log.read_records(path) == [{"step": 1}]
-    assert run_log.read_records(tmp_path / "missing.jsonl") == []
 
 
 def test_last_validation_is_the_latest_loss_or_none():
@@ -701,32 +693,6 @@ def test_read_parquet_turns_a_bucket_table_into_rows(monkeypatch):
     assert dashboard._read_parquet("user/bucket", "metrics.parquet", None) == [
         {"run_name": "shuffle-init42-data42", "step": 50}
     ]
-
-
-# run_log: one reader for a run's metrics file, shared by the chain, the status and the dashboard
-
-
-def test_run_log_reads_complete_records_and_skips_a_cut_line(tmp_path):
-    from scripts.g5k import run_log
-
-    path = tmp_path / "metrics.jsonl"
-    path.write_text('{"step": 0}\n{"step": 50, "val_loss": 4.0}\n{"step": 100, "tra')
-
-    assert run_log.read_records(path) == [{"step": 0}, {"step": 50, "val_loss": 4.0}]
-
-
-def test_run_log_reads_nothing_without_a_file(tmp_path):
-    from scripts.g5k import run_log
-
-    assert run_log.read_records(tmp_path / "missing.jsonl") == []
-
-
-def test_run_log_last_step_is_the_last_record_that_has_one():
-    from scripts.g5k import run_log
-
-    assert run_log.last_step([{"step": 0}, {"step": 50}, {"val_loss": 4.0}]) == 50
-    assert run_log.last_step([{"val_loss": 4.0}]) == 0
-    assert run_log.last_step([]) == 0
 
 
 def test_package_modules_are_run_as_modules_so_their_imports_resolve():

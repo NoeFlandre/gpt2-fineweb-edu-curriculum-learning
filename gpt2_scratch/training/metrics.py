@@ -15,15 +15,28 @@ class Tracker(Protocol):
         """Close the run."""
 
 
-def _read_records(path: Path) -> list[dict]:
+def read_records(path: Path) -> list[dict]:
+    """The complete records of a metrics file; a line cut short by a killed job is skipped."""
     if not path.exists():
         return []
-    return [json.loads(line) for line in path.read_text().splitlines()]
+    records = []
+    for line in path.read_text().splitlines():
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return records
+
+
+def last_step(records: list[dict]) -> int:
+    """The step of the last record that has one, or 0 when there is none."""
+    steps = [record["step"] for record in records if "step" in record]
+    return int(steps[-1]) if steps else 0
 
 
 def _kept_lines(path: Path, keep_before: int) -> str:
     """The records of an earlier run that precede the step a resumed run starts from."""
-    records = _read_records(path) if keep_before > 0 else []
+    records = read_records(path) if keep_before > 0 else []
     return "".join(json.dumps(record) + "\n" for record in records if record["step"] < keep_before)
 
 

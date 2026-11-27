@@ -22,6 +22,16 @@ fingerprint() {
     gpt2_scratch/experiment/arms.py gpt2_scratch/training/config.py | sha256sum | cut -d' ' -f1
 }
 
+# The file that records the fingerprint the site's environment and data for one data seed were built from.
+ready_file() {
+  echo "$GPT2_HOME/READY-data$1"
+}
+
+# Whether the site's environment and data for this data seed match this code.
+site_ready() {
+  [ "$(cat "$(ready_file "$1")" 2>/dev/null || true)" = "$(fingerprint)" ]
+}
+
 # The site of this host: gros-1.nancy.grid5000.fr and nancy.grid5000.fr both give nancy.
 site_of_host() {
   hostname -f | awk -F. '{ print (NF > 3 ? $2 : $1) }'

@@ -38,6 +38,7 @@ import pyarrow.parquet as pq
 from gpt2_scratch.experiment.naming import DATA_SEED, run_id
 from gpt2_scratch.model.config import STUDY_CONFIG
 from gpt2_scratch.training.config import TrainConfig
+from gpt2_scratch.training.metrics import read_records
 from gpt2_scratch.training.tracking import (
     PUBLISH_EVERY,
     TRACKIO_BUCKET,
@@ -45,8 +46,6 @@ from gpt2_scratch.training.tracking import (
     TRACKIO_SPACE,
 )
 from huggingface_hub import HfApi, get_token
-
-from scripts.g5k.run_log import read_records
 
 DASHBOARD_FILES = ("runs.json", "metrics.parquet", "aux/configs.parquet", "settings.json")
 NOT_METRICS = {"id", "run_id", "timestamp", "run_name", "step", "log_id", "space_id"}

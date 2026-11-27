@@ -12,10 +12,8 @@ load_hf_token
 data_seed=${1:-42}
 [[ "$data_seed" =~ ^[0-9]+$ ]] || { echo "DATA_SEED must be a number" >&2; exit 2; }
 data="data/data$data_seed"
-ready="$GPT2_HOME/READY-data$data_seed"
-
 fp=$(fingerprint)
-if [ "$(cat "$ready" 2>/dev/null || true)" = "$fp" ]; then
+if site_ready "$data_seed"; then
   echo "environment and data for data seed $data_seed already match this code ($fp)"
   exit 0
 fi
@@ -36,5 +34,5 @@ mv "$GPT2_HOME/env/venv.tar.zst.partial" "$GPT2_HOME/env/venv.tar.zst"
 
 rm -rf "$data"
 "$scratch/venv/bin/python" -m scripts.prepare_data --data-seed "$data_seed" --out "$data"
-printf '%s\n' "$fp" > "$ready"
+printf '%s\n' "$fp" > "$(ready_file "$data_seed")"
 echo "environment and data for data seed $data_seed ready ($fp)"

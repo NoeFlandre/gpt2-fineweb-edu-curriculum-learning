@@ -31,7 +31,7 @@ if [ -f "$finished" ]; then
   exit 0
 fi
 
-if [ "$(cat "$GPT2_HOME/READY-data$data_seed" 2>/dev/null || true)" != "$(fingerprint)" ]; then
+if ! site_ready "$data_seed"; then
   echo "the environment or the data of data seed $data_seed does not match this code: run launch.sh first" >&2
   exit 1
 fi

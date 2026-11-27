@@ -13,7 +13,7 @@ import argparse
 import json
 from pathlib import Path
 
-from scripts.g5k.run_log import last_step, read_records
+from gpt2_scratch.training.metrics import last_step, read_records
 
 MAX_FAILURES = 3
 METRICS = "metrics.jsonl"

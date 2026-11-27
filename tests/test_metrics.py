@@ -1,43 +1,27 @@
-import json
-
-from gpt2_scratch.training.metrics import MetricsLog
-from tests.test_tracking import RecordingTracker
+from gpt2_scratch.training.metrics import MetricsLog, last_step, read_records
 
 
-def test_a_fresh_log_starts_empty(tmp_path):
+def test_last_step_is_the_last_record_that_has_one():
+    assert last_step([{"step": 0}, {"step": 50}, {"val_loss": 4.0}]) == 50
+    assert last_step([{"val_loss": 4.0}]) == 0
+    assert last_step([]) == 0
+
+
+def test_read_records_skips_a_line_cut_short_by_a_killed_job(tmp_path):
     path = tmp_path / "metrics.jsonl"
-    path.write_text('{"step": 0}\n')
+    path.write_text('{"step": 0}\n{"step": 50, "val_loss": ')
 
-    MetricsLog(path)
-
-    assert path.read_text() == ""
+    assert read_records(path) == [{"step": 0}]
 
 
-def test_resuming_keeps_only_the_records_before_the_resume_step(tmp_path):
+def test_read_records_is_empty_without_a_file(tmp_path):
+    assert read_records(tmp_path / "missing.jsonl") == []
+
+
+def test_resuming_keeps_the_records_before_its_start_after_a_cut_line(tmp_path):
     path = tmp_path / "metrics.jsonl"
-    path.write_text('{"step": 0}\n{"step": 1}\n{"step": 2}\n')
+    path.write_text('{"step": 0}\n{"step": 50, "train_loss": 4.')
 
-    log = MetricsLog(path, keep_before=2)
-    log.write(step=2, train_loss=1.0)
+    MetricsLog(path, keep_before=50)
 
-    steps = [json.loads(line)["step"] for line in path.read_text().splitlines()]
-    assert steps == [0, 1, 2]
-
-
-def test_resuming_without_an_earlier_file_starts_empty(tmp_path):
-    path = tmp_path / "metrics.jsonl"
-
-    MetricsLog(path, keep_before=5)
-
-    assert path.read_text() == ""
-
-
-def test_write_appends_a_record_and_forwards_it_to_the_tracker(tmp_path):
-    path = tmp_path / "metrics.jsonl"
-    tracker = RecordingTracker()
-    log = MetricsLog(path, tracker)
-
-    log.write(step=3, val_loss=2.5)
-
-    assert json.loads(path.read_text()) == {"step": 3, "val_loss": 2.5}
-    assert tracker.logged == [(3, {"val_loss": 2.5})]
+    assert read_records(path) == [{"step": 0}]

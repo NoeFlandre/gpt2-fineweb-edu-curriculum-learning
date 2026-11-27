@@ -11,7 +11,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from scripts.g5k.run_log import last_step, read_records
+from gpt2_scratch.training.metrics import last_step, read_records
 
 FINISHED = ("Terminated", "Error")
 METRICS = "metrics.jsonl"

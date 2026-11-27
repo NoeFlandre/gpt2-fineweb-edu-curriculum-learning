@@ -64,7 +64,7 @@ fi
 
 mkdir -p "$GPT2_HOME/logs" "$GPT2_HOME/state"
 prep=""
-if [ "$(cat "$GPT2_HOME/READY-data$data_seed" 2>/dev/null || true)" != "$(fingerprint)" ]; then
+if ! site_ready "$data_seed"; then
   prep=$(submit_job "gpt2-prep-$cluster" abaca "gpu_count=0 AND memnode>=131072" "core=8,walltime=12:00" \
     "bash scripts/g5k/prepare_site.sh $data_seed")
   echo "environment and data job: $prep"
