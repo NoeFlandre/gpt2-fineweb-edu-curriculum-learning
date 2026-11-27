@@ -24,7 +24,8 @@ order in which documents are seen, which is set by each document's educational s
 trained with six seeds, 42 to 47.
 
 > **Status:** training complete. All 24 runs (4 orders x 6 seeds) are in this repository, in
-> `runs/init<N>-data42/<order>/`.
+> `runs/init<N>-data42/<order>/`. Earlier results were withdrawn: 16 validation documents had leaked
+> into the seed-42 training pool, so all 24 runs were retrained on the corrected setup.
 
 | Run | Order |
 |---|---|
@@ -41,30 +42,28 @@ in percent. Bold marks the best mean in each column.
 
 | Order | Val loss | [2.5, 3) | [3, 3.5) | [3.5, 4) | [4, 5] | HellaSwag | PIQA | ARC-Easy |
 |---|---|---|---|---|---|---|---|---|
-| `shuffle` | **4.006 ± 0.008** | 4.134 ± 0.008 | **4.028 ± 0.007** | 3.969 ± 0.008 | 3.893 ± 0.008 | 25.3 ± 0.2 | 56.1 ± 0.3 | 33.8 ± 0.9 |
-| `ascending` | 4.024 ± 0.008 | 4.187 ± 0.007 | 4.058 ± 0.008 | 3.975 ± 0.008 | **3.879 ± 0.007** | 25.1 ± 0.2 | 55.5 ± 0.4 | 33.5 ± 0.6 |
-| `descending` | 4.033 ± 0.010 | **4.128 ± 0.011** | 4.043 ± 0.010 | 4.009 ± 0.010 | 3.954 ± 0.011 | **25.4 ± 0.1** | **56.3 ± 0.9** | 33.0 ± 0.2 |
-| `cooldown` | 4.013 ± 0.006 | 4.158 ± 0.006 | 4.040 ± 0.007 | **3.969 ± 0.006** | 3.883 ± 0.006 | 25.2 ± 0.2 | 56.0 ± 0.2 | **33.9 ± 0.9** |
+| `shuffle` | 4.013 ± 0.006 | 4.141 ± 0.007 | **4.035 ± 0.007** | 3.976 ± 0.006 | 3.900 ± 0.006 | **25.5 ± 0.2** | **56.1 ± 0.6** | **34.2 ± 1.2** |
+| `ascending` | 4.022 ± 0.008 | 4.183 ± 0.007 | 4.055 ± 0.008 | 3.972 ± 0.008 | **3.876 ± 0.007** | 25.1 ± 0.3 | 55.5 ± 0.6 | 33.1 ± 0.5 |
+| `descending` | 4.036 ± 0.013 | **4.130 ± 0.013** | 4.046 ± 0.013 | 4.012 ± 0.013 | 3.957 ± 0.012 | 25.3 ± 0.1 | 55.9 ± 0.3 | 33.1 ± 0.6 |
+| `cooldown` | **4.010 ± 0.010** | 4.156 ± 0.010 | 4.038 ± 0.010 | **3.967 ± 0.009** | 3.881 ± 0.010 | 25.1 ± 0.2 | 55.9 ± 0.3 | 33.9 ± 0.4 |
 
 Validation loss per seed:
 
 | Order | 42 | 43 | 44 | 45 | 46 | 47 | Mean |
 |---|---|---|---|---|---|---|---|
-| `shuffle` | 4.001 | 3.997 | 4.014 | 4.017 | 4.007 | 4.001 | 4.006 |
-| `ascending` | 4.028 | 4.032 | 4.032 | 4.015 | 4.017 | 4.022 | 4.024 |
-| `descending` | 4.032 | 4.023 | 4.036 | 4.032 | 4.026 | 4.052 | 4.033 |
-| `cooldown` | 4.007 | 4.007 | 4.011 | 4.011 | 4.023 | 4.017 | 4.013 |
+| `shuffle` | 4.004 | 4.013 | 4.013 | 4.010 | 4.014 | 4.024 | 4.013 |
+| `ascending` | 4.022 | 4.036 | 4.013 | 4.017 | 4.020 | 4.020 | 4.022 |
+| `descending` | 4.039 | 4.012 | 4.036 | 4.037 | 4.044 | 4.048 | 4.036 |
+| `cooldown` | 4.010 | 4.003 | 4.030 | 4.007 | 4.007 | 4.006 | 4.010 |
 
-- **Shuffle has the lowest mean validation loss.** Within each seed it is lower than descending in all
-  six seeds (mean difference 0.027 nats) and lower than ascending in five. Its gap to cooldown (0.006
-  nats) is within seed-to-seed noise: shuffle is lower in four seeds and cooldown in two.
+- **Cooldown and shuffle are tied for the lowest mean validation loss** (4.010 and 4.013). Cooldown is lower in four seeds and shuffle in two, which is within seed-to-seed noise.
+- **Shuffle beats descending in five of six seeds** (mean difference 0.023 nats) and ascending in five (0.009 nats).
 - **Descending has the highest loss in five of six seeds.**
-- **The benchmarks are close to chance** for all four orders, and their differences are within seed
-  noise. Chance is 25% on HellaSwag, 50% on PIQA and 25% on ARC-Easy.
+- **The benchmarks are close to chance** for all four orders, and their differences are within seed noise. Chance is 25% on HellaSwag, 50% on PIQA and 25% on ARC-Easy.
 
-Training curves and comparison figures are in the
+Training curves are in the
 [Trackio dashboard](https://huggingface.co/spaces/NoeFlandre/gpt2-fineweb-edu-curriculum-learning),
-which covers all 24 runs, and in `runs/init42-data42/figures/` for seed 42.
+which covers all 24 runs. Comparison plots for the rerun are not generated yet.
 
 ## Model
 
@@ -78,13 +77,13 @@ which covers all 24 runs, and in `runs/init42-data42/figures/` for seed 42.
 
 | | |
 |---|---|
-| Data | FineWeb-Edu `sample-10BT`, shuffled (see Data below). The pool, the orders and the validation split are the same for every seed |
+| Data | FineWeb-Edu `sample-10BT`, shuffled (see Data below). The validation split is the same for every run, and each training pool excludes its documents |
 | Budget | 1,716 steps of 524,288 tokens, which is 899.7M tokens per run |
 | Optimizer | AdamW (β = 0.9, 0.95), weight decay 0.1 on weight matrices |
 | Learning rate | Peak 6e-4, linear warmup over 18 steps, cosine decay to 6e-5 |
-| Seeds | 42 to 47. The seed sets the model initialization only; the data is fixed at seed 42 |
+| Seeds | 42 to 47. The seed sets the model initialization only; the data seed is 42 |
 | Other | Gradient clipping at 1.0, bf16 autocast |
-| Hardware | Seed 42: one NVIDIA RTX A4500 Laptop GPU. Seeds 43 to 47: NVIDIA L40S and RTX A5000 GPUs on Grid'5000 |
+| Hardware | NVIDIA L40S and RTX A5000 GPUs on Grid'5000 (Grenoble) |
 
 ## Data
 
@@ -123,9 +122,6 @@ the data seed (42 for all runs so far), and `<order>` is the document order. Eac
 - `checkpoint.pt`: latest training checkpoint (weights, optimizer state and data position), saved
   every 100 steps. It can be earlier than the final step, so use `model.pt` for the final weights.
 
-`runs/init42-data42/figures/` holds the comparison plots for seed 42: `validation_loss.png`,
-`score_buckets.png`, `benchmarks.png` and `training_loss.png`. The other seeds have no figures yet.
-
 ## Usage
 
 The model is a plain PyTorch module. Its code is in the
@@ -153,7 +149,7 @@ model.eval()
   or question answering.
 - **The seed varies only the initialization.** The spread across seeds measures initialization noise.
   The data and its order are the same in every run, so variance from the data order is not measured.
-  The mean differences between orders are small, from 0.006 to 0.027 nats.
+  The mean differences between orders are small, at most 0.026 nats.
 - **Small scale.** At 45M parameters and 0.9B tokens, benchmark scores sit near chance.
 - **Same source.** The validation data comes from the same FineWeb-Edu stream as the training data,
   so it tests generalization within that slice, not to other web text.
