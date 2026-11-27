@@ -21,9 +21,10 @@ uv run python -m scripts.prepare_benchmarks --out data/benchmarks
 ```
 
 `prepare_data` streams FineWeb-Edu and writes the training pool in each of the four orders under
-`data/data<data seed>/arms/`, and the held-out validation split with its score buckets under
-`data/data<data seed>/validation/` (`buckets.json` reports the tokens per bucket). `--data-seed`
-(default 42) sets the pool, the orders and the validation split.
+`data/data<data seed>/arms/`. The held-out validation split is the same for every data seed: it is
+built once, from the seed-42 stream, into `data/validation/` (`buckets.json` reports the tokens per
+bucket, `doc_keys.txt` lists its documents), and copied into each data folder. A data seed's pool
+leaves out the validation documents. `--data-seed` (default 42) sets the pool and the orders.
 
 ## Train one arm
 

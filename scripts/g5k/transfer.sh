@@ -15,6 +15,6 @@ if [ -z "$site" ]; then
 fi
 
 rsync -az -e "ssh -J $G5K_LOGIN@access.grid5000.fr" \
-  --exclude 'data/data*/' --exclude runs/ --exclude .venv/ --exclude .git/ \
+  --exclude 'data/data*/' --exclude data/validation/ --exclude runs/ --exclude .venv/ --exclude .git/ \
   --exclude __pycache__/ --exclude .pytest_cache/ --exclude .ruff_cache/ --exclude .ty/ \
   ./ "$G5K_LOGIN@$site.grid5000.fr:gpt2-fineweb-edu-curriculum-learning/"

@@ -186,5 +186,6 @@ htmlcov/
 .mutmut-cache
 site/
 
-# Study data prepared by scripts/prepare_data.py, one folder per data seed (large)
+# Study data prepared by scripts/prepare_data.py: the fixed validation split, and one folder per data seed (large)
+data/validation/
 data/data*/

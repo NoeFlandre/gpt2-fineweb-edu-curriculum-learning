@@ -1,5 +1,6 @@
-"""The study's corpus: the training pool, each arm's token stream, and the score buckets."""
+"""The study's corpus: validation split, training pools, arm streams and score buckets."""
 
+import hashlib
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 
@@ -13,10 +14,11 @@ Encode = Callable[[str], np.ndarray]
 
 @dataclass(frozen=True)
 class Document:
-    """One encoded document (starting with its end-of-text token) and its continuous score."""
+    """One encoded document (starting with its end-of-text token), its score and its row key."""
 
     tokens: np.ndarray
     score: float
+    key: str
 
 
 class StreamTooShortError(ValueError):
@@ -30,20 +32,33 @@ def _eligible(row: dict) -> bool:
     return row["int_score"] >= MIN_INT_SCORE and bool(row["text"].strip())
 
 
+def row_key(row: dict) -> str:
+    """The identity of a row across data seeds: the hash of its text."""
+    return hashlib.sha256(row["text"].encode()).hexdigest()
+
+
 def bucket_of(score: float) -> int:
     """The score bucket (0 to 3) of one score: [2.5, 3.0), [3.0, 3.5), [3.5, 4.0), [4.0, 5.0]."""
     return int(np.searchsorted(SCORE_EDGES, score, side="right"))
 
 
-def collect_documents(rows: Iterator[dict], encode: Encode, budget: int) -> list[Document]:
-    """Encode eligible rows, in order, until they hold at least budget tokens."""
+def collect_documents(
+    rows: Iterator[dict], encode: Encode, budget: int, skip: frozenset[str] = frozenset()
+) -> list[Document]:
+    """Encode eligible rows, in order, until they hold at least budget tokens.
+
+    Rows whose key is in skip are left out before they are encoded.
+    """
     documents: list[Document] = []
     total = 0
     for row in rows:
         if not _eligible(row):
             continue
+        key = row_key(row)
+        if key in skip:
+            continue
         tokens = encode(row["text"])
-        documents.append(Document(tokens, float(row["score"])))
+        documents.append(Document(tokens, float(row["score"]), key))
         total += len(tokens)
         if total >= budget:
             break
@@ -67,24 +82,24 @@ def collect_stratified(rows: Iterator[dict], encode: Encode, quota: int) -> list
         if room <= 0:
             continue
         tokens = encode(row["text"])[:room]
-        documents.append(Document(tokens, score))
+        documents.append(Document(tokens, score, row_key(row)))
         filled[bucket] += len(tokens)
         if min(filled) >= quota:
             return documents
     raise StreamTooShortError(filled, quota)
 
 
-def split_pool_and_validation(
+def validation_after_pool(
     rows: Iterable[dict], encode: Encode, pool_tokens: int, val_tokens: int
-) -> tuple[list[Document], list[Document]]:
-    """Take the training pool first, then a stratified validation set from the rows that follow.
+) -> list[Document]:
+    """The study's validation set: a stratified sample of the rows that follow a pool.
 
-    The validation set holds val_tokens / BUCKET_COUNT tokens in each score bucket.
+    The first pool_tokens of eligible rows are consumed, as the pool of that stream would take them.
+    The validation set then holds val_tokens / BUCKET_COUNT tokens in each score bucket.
     """
     rows = iter(rows)
-    pool = collect_documents(rows, encode, pool_tokens)
-    validation = collect_stratified(rows, encode, val_tokens // BUCKET_COUNT)
-    return pool, validation
+    collect_documents(rows, encode, pool_tokens)
+    return collect_stratified(rows, encode, val_tokens // BUCKET_COUNT)
 
 
 def arm_tokens(documents: list[Document], order: np.ndarray, budget: int) -> np.ndarray:

@@ -4,6 +4,7 @@ import sys
 import zipfile
 
 import numpy as np
+from gpt2_scratch.data.corpus import collect_documents, validation_after_pool
 from gpt2_scratch.data.loader import TokenLoader
 from gpt2_scratch.data.shards import list_shards, load_shard
 from gpt2_scratch.publishing import MODEL_REPO
@@ -58,10 +59,16 @@ def test_write_examples_writes_one_json_object_per_line(tmp_path):
     assert json.loads(path.read_text()) == {"ctx": "a", "endings": ["b"], "label": 0}
 
 
-def test_build_study_writes_each_arm_and_the_stratified_validation_split(tmp_path):
-    rows = [edu_row(index) for index in range(40)]
+def write_study_files(folder, rows):
+    """Write a pool of 64 tokens and a validation split of 40 tokens from these rows."""
+    pool = collect_documents(iter(rows), encode, budget=65)
+    prepare_data.save_pool(folder, pool, pool_tokens=64, data_seed=1)
+    validation = validation_after_pool(rows, encode, pool_tokens=65, val_tokens=40)
+    prepare_data.save_validation(folder / "validation", validation)
 
-    prepare_data.build_study(rows, encode, tmp_path, pool_tokens=64, val_tokens=40, seed=1)
+
+def test_study_files_hold_each_arm_and_the_stratified_validation_split(tmp_path):
+    write_study_files(tmp_path, [edu_row(index) for index in range(40)])
 
     for arm in ("shuffle", "ascending", "descending", "cooldown"):
         tokens = load_shard(list_shards(tmp_path / "arms" / arm, "train")[0])
@@ -73,11 +80,11 @@ def test_build_study_writes_each_arm_and_the_stratified_validation_split(tmp_pat
     report = json.loads((tmp_path / "validation" / "buckets.json").read_text())
     assert report["edges"] == [3.0, 3.5, 4.0]
     assert report["tokens"] == [10, 10, 10, 10]
+    assert (tmp_path / "validation" / "doc_keys.txt").read_text().count("\n") == 4
 
 
 def test_each_arm_keeps_the_final_target_inside_its_shard(tmp_path):
-    rows = [edu_row(index) for index in range(40)]
-    prepare_data.build_study(rows, encode, tmp_path, pool_tokens=64, val_tokens=40, seed=1)
+    write_study_files(tmp_path, [edu_row(index) for index in range(40)])
     tokens = load_shard(list_shards(tmp_path / "arms" / "shuffle", "train")[0])
     loader = TokenLoader(tmp_path / "arms" / "shuffle", "train", batch_size=2, seq_len=4)
 
@@ -242,8 +249,14 @@ def test_prepare_benchmarks_main_writes_into_the_output_folder(monkeypatch, tmp_
     assert written == [tmp_path]
 
 
-def test_prepare_data_main_streams_fineweb_edu_into_the_study(monkeypatch, tmp_path):
-    captured = {}
+def test_prepare_data_builds_the_validation_once_and_each_pool_without_its_documents(
+    monkeypatch, tmp_path
+):
+    rows = [edu_row(index) for index in range(60)]
+    # Seed 42 streams the rows in order. Any other seed starts with rows of the validation split.
+    orders = {42: rows, 7: rows[4:8] + rows[:4] + rows[8:]}
+    pools = []
+    original_save_pool = prepare_data.save_pool
 
     class FakeEncoder:
         eot_token = 50256
@@ -251,44 +264,46 @@ def test_prepare_data_main_streams_fineweb_edu_into_the_study(monkeypatch, tmp_p
         def encode_ordinary(self, text):
             return [ord(char) for char in text]
 
-    class FakeStream:
-        def shuffle(self, seed, buffer_size):
-            captured["shuffle"] = (seed, buffer_size)
-            return ["row"]
+    class FakeDataset:
+        def shuffle(self, seed, **_kwargs):
+            return orders[seed]
 
-    def fake_load_dataset(dataset, **kwargs):
-        captured["dataset"] = (dataset, kwargs)
-        return FakeStream()
-
-    def fake_build_study(rows, encode, out, pool_tokens, val_tokens, seed):
-        captured.update(
-            rows=rows,
-            encoded=encode("a").tolist(),
-            out=out,
-            pool_tokens=pool_tokens,
-            val_tokens=val_tokens,
-            seed=seed,
-        )
+    def record_pool(out, pool, pool_tokens, data_seed):
+        pools.append({doc.key for doc in pool})
+        original_save_pool(out, pool, pool_tokens, data_seed)
 
     monkeypatch.setattr(prepare_data.tiktoken, "get_encoding", lambda _name: FakeEncoder())
-    monkeypatch.setattr(prepare_data, "load_dataset", fake_load_dataset)
-    monkeypatch.setattr(prepare_data, "build_study", fake_build_study)
-    monkeypatch.setattr(sys, "argv", ["prepare_data", "--out", str(tmp_path)])
+    monkeypatch.setattr(prepare_data, "load_dataset", lambda *_args, **_kwargs: FakeDataset())
+    monkeypatch.setattr(prepare_data, "save_pool", record_pool)
+    monkeypatch.setattr(prepare_data, "POOL_TOKENS", 64)
+    monkeypatch.setattr(prepare_data, "VAL_TOKENS", 40)
+    validation = tmp_path / "validation"
+    for data_seed in (42, 7):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "prepare_data",
+                "--data-seed",
+                str(data_seed),
+                "--out",
+                str(tmp_path / f"data{data_seed}"),
+                "--validation",
+                str(validation),
+                "--pool-tokens",
+                "64",
+            ],
+        )
+        prepare_data.main()
 
-    prepare_data.main()
-
-    cfg = TrainConfig()
-    assert captured["dataset"] == (
-        prepare_data.EDU,
-        {"name": "sample-10BT", "split": "train", "streaming": True},
-    )
-    assert captured["shuffle"] == (cfg.seed, prepare_data.STREAM_BUFFER)
-    assert captured["rows"] == ["row"]
-    assert captured["encoded"] == [50256, 97]
-    assert captured["out"] == tmp_path
-    assert captured["pool_tokens"] == cfg.max_steps * cfg.total_batch_size
-    assert captured["val_tokens"] == prepare_data.VAL_TOKENS
-    assert captured["seed"] == cfg.seed
+    keys = set((validation / "doc_keys.txt").read_text().split())
+    assert len(keys) == 4
+    assert pools[0].isdisjoint(keys)
+    assert pools[1].isdisjoint(keys)
+    assert len(pools[1]) == 4
+    assert (tmp_path / "data7" / "validation" / "doc_keys.txt").read_text() == (
+        validation / "doc_keys.txt"
+    ).read_text()
 
 
 def test_run_folders_keeps_the_folders_that_hold_metrics(tmp_path):

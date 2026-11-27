@@ -8,8 +8,9 @@ from gpt2_scratch.data.corpus import (
     bucket_of,
     collect_documents,
     collect_stratified,
-    split_pool_and_validation,
+    row_key,
     token_buckets,
+    validation_after_pool,
 )
 from gpt2_scratch.data.loader import TokenLoader
 from gpt2_scratch.data.shards import list_shards, load_shard, save_shard
@@ -99,28 +100,34 @@ def test_collect_stratified_fails_when_the_rows_end_before_every_bucket_is_full(
         collect_stratified(iter([row("ab", 3, 2.6)]), encode, quota=6)
 
 
-def test_split_keeps_validation_documents_out_of_the_pool():
-    pool, validation = split_pool_and_validation(
-        spread_rows(40), encode, pool_tokens=20, val_tokens=40
-    )
+def test_validation_comes_after_the_pool_rows_and_shares_none_of_them():
+    rows = spread_rows(40)
+    validation = validation_after_pool(rows, encode, pool_tokens=20, val_tokens=40)
+    pool = collect_documents(iter(rows), encode, budget=20)
 
-    assert len(pool) == 4
-    assert {doc.score for doc in pool}.isdisjoint({doc.score for doc in validation})
+    assert {doc.key for doc in pool}.isdisjoint({doc.key for doc in validation})
 
 
 def test_validation_holds_the_same_number_of_tokens_in_every_bucket():
-    _, validation = split_pool_and_validation(
-        spread_rows(40), encode, pool_tokens=20, val_tokens=40
-    )
+    validation = validation_after_pool(spread_rows(40), encode, pool_tokens=20, val_tokens=40)
 
     counts = np.bincount(token_buckets(validation), minlength=4)
     assert counts.tolist() == [10, 10, 10, 10]
 
 
+def test_collect_documents_leaves_out_the_rows_whose_keys_are_skipped():
+    rows = [row("aa", 3, 3.1), row("bb", 3, 3.2), row("cc", 3, 3.3)]
+    skip = frozenset({row_key(rows[0])})
+
+    docs = collect_documents(iter(rows), encode, budget=1000, skip=skip)
+
+    assert [doc.key for doc in docs] == [row_key(rows[1]), row_key(rows[2])]
+
+
 def test_arm_tokens_are_exactly_the_budget_in_document_order():
     docs = [
-        Document(np.array([EOT, 1, 2], dtype=np.uint16), 3.1),
-        Document(np.array([EOT, 3], dtype=np.uint16), 3.2),
+        Document(np.array([EOT, 1, 2], dtype=np.uint16), 3.1, "a"),
+        Document(np.array([EOT, 3], dtype=np.uint16), 3.2, "b"),
     ]
 
     tokens = arm_tokens(docs, np.array([1, 0]), budget=4)
@@ -137,8 +144,8 @@ def test_score_buckets_follow_the_fixed_edges_from_2_5_to_5():
 
 def test_token_buckets_repeat_each_document_bucket_for_its_tokens():
     docs = [
-        Document(np.array([EOT, 1], dtype=np.uint16), 3.5),
-        Document(np.array([EOT], dtype=np.uint16), 4.5),
+        Document(np.array([EOT, 1], dtype=np.uint16), 3.5, "a"),
+        Document(np.array([EOT], dtype=np.uint16), 4.5, "b"),
     ]
 
     buckets = token_buckets(docs)
