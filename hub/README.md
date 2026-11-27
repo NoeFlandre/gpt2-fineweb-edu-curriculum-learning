@@ -14,6 +14,8 @@ tags:
 - pretraining
 ---
 
+![Four document orders feeding GPT-2 45M, with a falling validation-loss curve](https://huggingface.co/NoeFlandre/gpt2-fineweb-edu-curriculum-learning/resolve/main/assets/hero.svg)
+
 # GPT-2 45M: curriculum learning on FineWeb-Edu
 
 Four small GPT-2 models, trained from scratch on the same 900M tokens of

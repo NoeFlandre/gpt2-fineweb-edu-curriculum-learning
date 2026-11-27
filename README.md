@@ -1,3 +1,5 @@
+![Four document orders feeding GPT-2 45M, with a falling validation-loss curve](docs/hero.svg)
+
 # GPT-2 curriculum learning on FineWeb-Edu
 
 Does the order in which a language model sees its training documents change what it learns?
