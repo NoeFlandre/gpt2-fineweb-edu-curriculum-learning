@@ -115,6 +115,7 @@ def main() -> None:
             config={"arm": args.arm, "train": asdict(cfg), "model": asdict(model_config)},
             space_id=args.space,
             bucket_id=args.bucket,
+            group=args.arm,
         )
     elif args.dashboard == "site":
         tracker = SiteDashboard(args.seed)

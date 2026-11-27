@@ -511,8 +511,8 @@ def test_write_dashboard_logs_every_run_then_syncs_once(monkeypatch):
     calls = []
 
     class FakeTrackio:
-        def init(self, project, name, config):
-            calls.append(("init", project, name, config))
+        def init(self, project, name, group, config):
+            calls.append(("init", project, name, group, config))
 
         def log(self, values, step):
             calls.append(("log", values, step))
@@ -529,7 +529,7 @@ def test_write_dashboard_logs_every_run_then_syncs_once(monkeypatch):
     dashboard.write_dashboard([run], "proj", "space", "bucket")
 
     assert calls == [
-        ("init", "proj", "shuffle-init43-data42", {"arm": "shuffle"}),
+        ("init", "proj", "shuffle-init43-data42", "shuffle", {"arm": "shuffle"}),
         ("log", {"val_loss": 4.0}, 50),
         ("finish",),
         ("sync", "proj", "space", "bucket", "static", False),

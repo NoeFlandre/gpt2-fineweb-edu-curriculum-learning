@@ -150,7 +150,7 @@ def write_dashboard(runs: list[Run], project: str, space: str, bucket: str) -> N
     import trackio  # reads TRACKIO_DIR when it is imported, so the job sets it first
 
     for run in runs:
-        trackio.init(project=project, name=run.name, config=run.config)
+        trackio.init(project=project, name=run.name, group=run.config["arm"], config=run.config)
         for step, values in run.records:
             trackio.log(values, step=step)
         trackio.finish()

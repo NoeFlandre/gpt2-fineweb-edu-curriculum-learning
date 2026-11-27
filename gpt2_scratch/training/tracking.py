@@ -42,9 +42,10 @@ class TrackioTracker:
         config: dict,
         space_id: str = TRACKIO_SPACE,
         bucket_id: str = TRACKIO_BUCKET,
+        group: str | None = None,
     ) -> "TrackioTracker":
-        """Start a run named name in project and remember where to publish it."""
-        trackio.init(project=project, name=name, config=config)
+        """Start a run named name in project, in group, and remember where to publish it."""
+        trackio.init(project=project, name=name, group=group, config=config)
         return cls(project, space_id, bucket_id)
 
     def log(self, metrics: dict, step: int) -> None:

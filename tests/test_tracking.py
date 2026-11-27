@@ -28,10 +28,10 @@ def test_start_creates_a_named_trackio_run(monkeypatch):
     monkeypatch.setattr(tracking.trackio, "init", lambda **kwargs: calls.append(kwargs))
 
     tracker = tracking.TrackioTracker.start(
-        project="p", name="shuffle", config={"a": 1}, space_id="s", bucket_id="b"
+        project="p", name="shuffle", config={"a": 1}, space_id="s", bucket_id="b", group="shuffle"
     )
 
-    assert calls == [{"project": "p", "name": "shuffle", "config": {"a": 1}}]
+    assert calls == [{"project": "p", "name": "shuffle", "group": "shuffle", "config": {"a": 1}}]
     assert (tracker.project, tracker.space_id, tracker.bucket_id) == ("p", "s", "b")
 
 
