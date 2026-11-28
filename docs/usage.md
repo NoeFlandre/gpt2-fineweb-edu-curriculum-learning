@@ -10,7 +10,7 @@
 
 The seed sets only the model initialization. The data (the pool, the four document orders and the
 validation split) is built once with a fixed seed of 42, so every training seed sees the same data. Each
-training seed has its own runs folder, `runs/init<N>-data42/<order>/`. `scripts/run_experiment.sh` takes `SEED`
+training seed has its own runs folder, `runs/<run>/<order>/`. `scripts/run_experiment.sh` takes `SEED`
 (default 42).
 
 ## Build the data
@@ -29,19 +29,19 @@ leaves out the validation documents. `--data-seed` (default 42) sets the pool an
 ## Train one arm
 
 ```bash
-uv run python -m scripts.train --arm cooldown --seed 42 --data-seed 42 --out runs/init42-data42/cooldown
+uv run python -m scripts.train --arm cooldown --seed 42 --data-seed 42 --out runs/lr6e-4_params45.2M_tokens899.7M_init42_data42/cooldown
 ```
 
-`--seed` sets the model initialization. Its run is named `init<seed>-data<data seed>`.
+`--seed` sets the model initialization. Its run is named by `run_id`, such as `lr6e-4_params45.2M_tokens899.7M_init42_data42`.
 
-Writes `metrics.jsonl`, `model.pt` and `config.json` into `runs/init42-data42/cooldown`. Each checkpoint is uploaded
+Writes `metrics.jsonl`, `model.pt` and `config.json` into `runs/lr6e-4_params45.2M_tokens899.7M_init42_data42/cooldown`. Each checkpoint is uploaded
 to the model repository and its local copy deleted; pass `--no-hub` to keep checkpoints local
 instead.
 
 ## Plot and upload
 
 ```bash
-uv run python -m scripts.report --runs runs/init42-data42 --out runs/init42-data42/figures
+uv run python -m scripts.report --runs runs/lr6e-4_params45.2M_tokens899.7M_init42_data42 --out runs/lr6e-4_params45.2M_tokens899.7M_init42_data42/figures
 uv run python -m scripts.upload --runs runs
 ```
 

@@ -66,7 +66,7 @@ uv run pytest
 bash scripts/run_experiment.sh   # needs a CUDA GPU and a Hugging Face token with write access
 ```
 
-`SEED=43 bash scripts/run_experiment.sh` trains another seed; `DATA_SEED=43` draws another data sample. Both default to 42. Each run goes to `runs/init<N>-data<D>/`, where `<N>` is the initialization seed and `<D>` the data seed.
+`SEED=43 bash scripts/run_experiment.sh` trains another seed; `DATA_SEED=43` draws another data sample. Both default to 42. Each run goes to `runs/<run>/`, named by its learning rate, parameter count, token count, initialization seed `<N>` and data seed `<D>`.
 
 The steps can also be run one at a time: `scripts/prepare_data.py`, `scripts/prepare_benchmarks.py`, `scripts/train.py --arm <name>`, `scripts/report.py` and `scripts/upload.py`. See [docs/usage.md](docs/usage.md).
 

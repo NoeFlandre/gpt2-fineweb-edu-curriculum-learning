@@ -1,6 +1,7 @@
 """Train one ordering arm, tracking curves in Trackio and keeping its checkpoints on the Hub.
 
-Example: python -m scripts.train --arm cooldown --seed 42 --out runs/init42-data42/cooldown
+Example: python -m scripts.train --arm cooldown --seed 42 \
+    --out runs/lr6e-4_params45.2M_tokens899.7M_init42_data42/cooldown
 
 If the output folder has no checkpoint, the one published for this arm is downloaded first, so an
 interrupted run resumes from the Hub. Pass --no-hub to keep everything local.

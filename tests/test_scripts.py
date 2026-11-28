@@ -446,7 +446,9 @@ def test_main_resumes_from_the_hub_checkpoint_and_publishes_its_checkpoints(
 
     assert published == [100]
     assert hub.events == [("create", MODEL_REPO, "model", True), "fetch"]
-    assert "resuming init42-data42/shuffle" in capsys.readouterr().out
+    assert (
+        "resuming lr6e-4_params45.2M_tokens899.7M_init42_data42/shuffle" in capsys.readouterr().out
+    )
 
 
 def test_dashboard_none_skips_trackio_and_trains_without_a_tracker(monkeypatch, tmp_path):
@@ -568,4 +570,7 @@ def test_data_seed_picks_the_data_folder_and_the_run_name(monkeypatch, tmp_path)
 
     train.main()
 
-    assert seen == {"name": "shuffle-init43-data7", "data": Path("data/data7")}
+    assert seen == {
+        "name": "shuffle-lr6e-4_params45.2M_tokens899.7M_init43_data7",
+        "data": Path("data/data7"),
+    }

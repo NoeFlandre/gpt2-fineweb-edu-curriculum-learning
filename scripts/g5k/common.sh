@@ -11,7 +11,7 @@ export PATH="$HOME/.local/bin:$PATH"
 GPT2_HOME="$HOME/gpt2-g5k"
 
 # The name of the runs of an initialization seed and a data seed: run_id SEED DATA_SEED, such as
-# init43-data42 (gpt2_scratch/experiment/naming.py).
+# lr6e-4_params45.2M_tokens899.7M_init43_data42 (gpt2_scratch/experiment/naming.py).
 run_id() {
   python3 -c "from gpt2_scratch.experiment.naming import run_id; print(run_id($1, $2))"
 }

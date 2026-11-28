@@ -68,3 +68,13 @@ def test_study_model_has_about_19_million_non_embedding_parameters():
 def test_study_model_is_six_layers_of_width_512_with_block_1024():
     assert (STUDY_CONFIG.n_layer, STUDY_CONFIG.n_embd, STUDY_CONFIG.n_head) == (6, 512, 8)
     assert STUDY_CONFIG.block_size == 1024
+
+
+def test_n_params_matches_the_parameters_of_the_built_model():
+    model = GPT2(TINY)
+
+    assert TINY.n_params == sum(p.numel() for p in model.parameters())
+
+
+def test_study_model_n_params_is_exact():
+    assert STUDY_CONFIG.n_params == 45_195_264
