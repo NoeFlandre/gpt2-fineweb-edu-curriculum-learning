@@ -4,14 +4,14 @@
 # each link resumes from there. When training ends, the checkpoint, weights and metrics are published
 # once to the Hugging Face model repository under runs/<run id>/ARM, and deleted from the site.
 #
-# Usage: bash scripts/g5k/train_arm.sh ARM CLUSTER WALLTIME SEED DATA_SEED [QUEUE]
+# Usage: bash scripts/g5k/train_arm.sh ARM CLUSTER WALLTIME SEED DATA_SEED [QUEUE] [SCHEDULE]
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 source scripts/g5k/common.sh
 load_hf_token
 
-arm=$1 cluster=$2 walltime=$3 seed=$4 data_seed=$5 queue=${6:-abaca}
-rid=$(run_id "$seed" "$data_seed")
+arm=$1 cluster=$2 walltime=$3 seed=$4 data_seed=$5 queue=${6:-abaca} schedule=${7:-cosine}
+rid=$(run_id "$seed" "$data_seed" "$schedule")
 key="$arm-$rid"
 run="runs/$rid/$arm"
 data="data/data$data_seed"
@@ -53,7 +53,7 @@ if [ ! -f "$run/model.pt" ]; then
   # Queue the successor now, so it starts the moment this link ends, however it ends.
   if [ -n "${OAR_JOB_ID:-}" ]; then
     next=$(submit_job "gpt2-$key-$cluster" "$queue" "cluster='$cluster'" "gpu=1,walltime=$walltime" \
-      "bash scripts/g5k/train_arm.sh $arm $cluster $walltime $seed $data_seed $queue" -a "$OAR_JOB_ID") || next=""
+      "bash scripts/g5k/train_arm.sh $arm $cluster $walltime $seed $data_seed $queue $schedule" -a "$OAR_JOB_ID") || next=""
     if [ -n "$next" ]; then
       echo "$next" > "$successor"
     else
@@ -65,11 +65,11 @@ if [ ! -f "$run/model.pt" ]; then
   cp -r "$data/validation" "$scratch/data/"
   cp -r "$data/arms/$arm" "$scratch/data/arms/"
   export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-  "$scratch/venv/bin/python" -m scripts.train --arm "$arm" --seed "$seed" --data-seed "$data_seed" \
+  "$scratch/venv/bin/python" -m scripts.train --arm "$arm" --seed "$seed" --data-seed "$data_seed" --schedule "$schedule" \
     --data "$scratch/data" --benchmarks data/benchmarks --out "$run" --no-hub --dashboard site
 fi
 
-"$scratch/venv/bin/python" -m scripts.g5k.publish --arm "$arm" --seed "$seed" --data-seed "$data_seed" --out "$run"
+"$scratch/venv/bin/python" -m scripts.g5k.publish --arm "$arm" --seed "$seed" --data-seed "$data_seed" --schedule "$schedule" --out "$run"
 touch "$finished"
 cancel_successor
 echo "$key finished and published"

@@ -233,20 +233,20 @@ def test_report_shows_each_arm_and_the_live_jobs(tmp_path):
     write_metrics(
         tmp_path
         / "runs"
-        / "lr6e-4_params45.2M_tokens899.7M_init42_data42"
+        / "lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42"
         / "shuffle"
         / "metrics.jsonl",
         {"step": 0},
         {"step": 1716, "val_loss": 4.001},
     )
     (tmp_path / "state").mkdir()
-    (tmp_path / "state" / "shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42.done").write_text(
-        ""
-    )
+    (
+        tmp_path / "state" / "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42.done"
+    ).write_text("")
     write_metrics(
         tmp_path
         / "runs"
-        / "lr6e-4_params45.2M_tokens899.7M_init43_data42"
+        / "lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42"
         / "cooldown"
         / "metrics.jsonl",
         {"step": 300},
@@ -255,9 +255,9 @@ def test_report_shows_each_arm_and_the_live_jobs(tmp_path):
 
     text = status.report(tmp_path / "runs", jobs, tmp_path / "state")
 
-    assert "shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42" in text
+    assert "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42" in text
     assert "step  1716  val_loss  4.001  published" in text
-    assert "cooldown-lr6e-4_params45.2M_tokens899.7M_init43_data42" in text
+    assert "cooldown-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42" in text
     assert "step   300" in text
     assert "job 9  gpt2-cooldown-gros  Waiting" in text
 
@@ -326,7 +326,7 @@ def test_status_main_prints_the_report(tmp_path, monkeypatch, capsys):
 def test_publish_uploads_the_finished_arm_and_removes_its_weights(tmp_path, monkeypatch, capsys):
     from scripts.g5k import publish
 
-    out = tmp_path / "runs" / "lr6e-4_params45.2M_tokens899.7M_init42_data42" / "shuffle"
+    out = tmp_path / "runs" / "lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42" / "shuffle"
     out.mkdir(parents=True)
     (out / "checkpoint.pt").write_bytes(b"state")
     (out / "model.pt").write_bytes(b"weights")
@@ -358,14 +358,14 @@ def test_publish_uploads_the_finished_arm_and_removes_its_weights(tmp_path, monk
     assert sent == {
         "api": "api",
         "repo": "user/repo",
-        "run": "lr6e-4_params45.2M_tokens899.7M_init42_data42/shuffle",
+        "run": "lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42/shuffle",
         "folder": out,
     }
     assert not (out / "checkpoint.pt").exists()
     assert not (out / "model.pt").exists()
     assert not (out / "config.json").exists()
     assert (
-        "published lr6e-4_params45.2M_tokens899.7M_init42_data42/shuffle to user/repo"
+        "published lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42/shuffle to user/repo"
         in capsys.readouterr().out
     )
 
@@ -421,7 +421,7 @@ def test_metric_values_skip_identifiers_and_missing_values():
     row = {
         "id": 1,
         "run_id": "r",
-        "run_name": "shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42",
+        "run_name": "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42",
         "step": 50,
         "val_loss": 4.0,
         "train_loss": float("nan"),
@@ -436,18 +436,18 @@ def test_bucket_runs_rebuild_each_run_from_the_bucket_files():
     from scripts.g5k import dashboard
 
     runs_json = [
-        {"name": "shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42"},
-        {"name": "cooldown-lr6e-4_params45.2M_tokens899.7M_init42_data42"},
+        {"name": "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42"},
+        {"name": "cooldown-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42"},
     ]
     configs = [
         {
-            "run_name": "shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42",
+            "run_name": "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42",
             "arm": "shuffle",
             "train": {"seed": 42},
             "model": {"n": 1},
         },
         {
-            "run_name": "cooldown-lr6e-4_params45.2M_tokens899.7M_init42_data42",
+            "run_name": "cooldown-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42",
             "arm": "cooldown",
             "train": {"seed": 42},
             "model": {"n": 1},
@@ -455,21 +455,21 @@ def test_bucket_runs_rebuild_each_run_from_the_bucket_files():
     ]
     metrics = [
         {
-            "run_name": "shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42",
+            "run_name": "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42",
             "step": 100,
             "train_loss": 3.0,
             "run_id": "a",
             "id": 2,
         },
         {
-            "run_name": "shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42",
+            "run_name": "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42",
             "step": 50,
             "val_loss": 4.0,
             "run_id": "a",
             "id": 1,
         },
         {
-            "run_name": "shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42",
+            "run_name": "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42",
             "step": 60,
             "train_loss": None,
         },
@@ -478,7 +478,7 @@ def test_bucket_runs_rebuild_each_run_from_the_bucket_files():
     runs = dashboard.bucket_runs(runs_json, configs, metrics)
 
     assert runs[0] == dashboard.Run(
-        "shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42",
+        "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42",
         {"arm": "shuffle", "train": {"seed": 42}, "model": {"n": 1}},
         [(50, {"val_loss": 4.0}), (100, {"train_loss": 3.0})],
     )
@@ -489,24 +489,33 @@ def test_site_runs_read_each_arm_of_a_seed_and_skip_a_cut_line(tmp_path):
     from scripts.g5k import dashboard
 
     write_metrics(
-        tmp_path / "lr6e-4_params45.2M_tokens899.7M_init43_data42" / "shuffle" / "metrics.jsonl",
+        tmp_path
+        / "lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42"
+        / "shuffle"
+        / "metrics.jsonl",
         {"step": 50, "val_loss": 4.0},
     )
     with (
-        tmp_path / "lr6e-4_params45.2M_tokens899.7M_init43_data42" / "shuffle" / "metrics.jsonl"
+        tmp_path
+        / "lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42"
+        / "shuffle"
+        / "metrics.jsonl"
     ).open("a") as file:
         file.write('{"step": 100, "tra')
     write_metrics(
-        tmp_path / "lr6e-4_params45.2M_tokens899.7M_init43_data42" / "ascending" / "metrics.jsonl",
+        tmp_path
+        / "lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42"
+        / "ascending"
+        / "metrics.jsonl",
         {"step": 0},
     )
-    (tmp_path / "lr6e-4_params45.2M_tokens899.7M_init43_data42" / "empty").mkdir()
+    (tmp_path / "lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42" / "empty").mkdir()
 
     runs = dashboard.site_runs(tmp_path, 43)
 
     assert [run.name for run in runs] == [
-        "ascending-lr6e-4_params45.2M_tokens899.7M_init43_data42",
-        "shuffle-lr6e-4_params45.2M_tokens899.7M_init43_data42",
+        "ascending-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42",
+        "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42",
     ]
     shuffle = runs[1]
     assert shuffle.config["arm"] == "shuffle"
@@ -518,20 +527,20 @@ def test_merged_replaces_a_run_the_site_also_has_and_keeps_the_rest():
     from scripts.g5k import dashboard
 
     bucket = [
-        dashboard.Run("shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42", {}, []),
-        dashboard.Run("shuffle-lr6e-4_params45.2M_tokens899.7M_init43_data42", {"v": 1}, []),
+        dashboard.Run("shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42", {}, []),
+        dashboard.Run("shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42", {"v": 1}, []),
     ]
     sites = [
-        dashboard.Run("shuffle-lr6e-4_params45.2M_tokens899.7M_init43_data42", {"v": 2}, []),
-        dashboard.Run("ascending-lr6e-4_params45.2M_tokens899.7M_init43_data42", {}, []),
+        dashboard.Run("shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42", {"v": 2}, []),
+        dashboard.Run("ascending-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42", {}, []),
     ]
 
     names = [(run.name, run.config) for run in dashboard.merged(bucket, sites)]
 
     assert names == [
-        ("shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42", {}),
-        ("shuffle-lr6e-4_params45.2M_tokens899.7M_init43_data42", {"v": 2}),
-        ("ascending-lr6e-4_params45.2M_tokens899.7M_init43_data42", {}),
+        ("shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42", {}),
+        ("shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42", {"v": 2}),
+        ("ascending-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42", {}),
     ]
 
 
@@ -555,7 +564,7 @@ def test_write_dashboard_logs_every_run_then_syncs_once(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "trackio", FakeTrackio())
     run = dashboard.Run(
-        "shuffle-lr6e-4_params45.2M_tokens899.7M_init43_data42",
+        "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42",
         {"arm": "shuffle"},
         [(50, {"val_loss": 4.0})],
     )
@@ -566,7 +575,7 @@ def test_write_dashboard_logs_every_run_then_syncs_once(monkeypatch):
         (
             "init",
             "proj",
-            "shuffle-lr6e-4_params45.2M_tokens899.7M_init43_data42",
+            "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42",
             "shuffle",
             {"arm": "shuffle"},
         ),
@@ -588,13 +597,13 @@ def stub_rebuild(monkeypatch, events):
         dashboard,
         "fetch",
         lambda _bucket, _name, _token: json.dumps(
-            [{"name": "cooldown-lr6e-4_params45.2M_tokens899.7M_init42_data42"}]
+            [{"name": "cooldown-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42"}]
         ).encode(),
     )
     tables = {
         "aux/configs.parquet": [
             {
-                "run_name": "cooldown-lr6e-4_params45.2M_tokens899.7M_init42_data42",
+                "run_name": "cooldown-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42",
                 "arm": "cooldown",
                 "train": {},
                 "model": {},
@@ -602,7 +611,7 @@ def stub_rebuild(monkeypatch, events):
         ],
         "metrics.parquet": [
             {
-                "run_name": "cooldown-lr6e-4_params45.2M_tokens899.7M_init42_data42",
+                "run_name": "cooldown-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42",
                 "step": 0,
                 "val_loss": 5.0,
             }
@@ -622,7 +631,10 @@ def test_dashboard_main_backs_up_then_rebuilds_with_the_site_runs(monkeypatch, t
     from scripts.g5k import dashboard
 
     write_metrics(
-        tmp_path / "lr6e-4_params45.2M_tokens899.7M_init43_data42" / "shuffle" / "metrics.jsonl",
+        tmp_path
+        / "lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42"
+        / "shuffle"
+        / "metrics.jsonl",
         {"step": 50, "val_loss": 4.0},
     )
     events = []
@@ -635,8 +647,8 @@ def test_dashboard_main_backs_up_then_rebuilds_with_the_site_runs(monkeypatch, t
     assert events[1] == (
         "write",
         [
-            "cooldown-lr6e-4_params45.2M_tokens899.7M_init42_data42",
-            "shuffle-lr6e-4_params45.2M_tokens899.7M_init43_data42",
+            "cooldown-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42",
+            "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42",
         ],
     )
     assert "dashboard rebuilt with 2 runs" in capsys.readouterr().out
@@ -646,7 +658,10 @@ def test_dashboard_main_without_backup_rebuilds_under_the_site_lock(monkeypatch,
     from scripts.g5k import dashboard
 
     write_metrics(
-        tmp_path / "lr6e-4_params45.2M_tokens899.7M_init43_data42" / "shuffle" / "metrics.jsonl",
+        tmp_path
+        / "lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42"
+        / "shuffle"
+        / "metrics.jsonl",
         {"step": 50, "val_loss": 4.0},
     )
     events = []
@@ -661,8 +676,8 @@ def test_dashboard_main_without_backup_rebuilds_under_the_site_lock(monkeypatch,
         (
             "write",
             [
-                "cooldown-lr6e-4_params45.2M_tokens899.7M_init42_data42",
-                "shuffle-lr6e-4_params45.2M_tokens899.7M_init43_data42",
+                "cooldown-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42",
+                "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42",
             ],
         )
     ]
@@ -766,14 +781,17 @@ def test_read_parquet_turns_a_bucket_table_into_rows(monkeypatch):
     buffer = io.BytesIO()
     pq.write_table(
         pa.table(
-            {"run_name": ["shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42"], "step": [50]}
+            {
+                "run_name": ["shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42"],
+                "step": [50],
+            }
         ),
         buffer,
     )
     monkeypatch.setattr(dashboard, "fetch", lambda _bucket, _name, _token: buffer.getvalue())
 
     assert dashboard._read_parquet("user/bucket", "metrics.parquet", None) == [
-        {"run_name": "shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42", "step": 50}
+        {"run_name": "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42", "step": 50}
     ]
 
 
@@ -789,19 +807,19 @@ def test_package_modules_are_run_as_modules_so_their_imports_resolve():
 def test_chains_on_counts_each_live_chain_once_per_cluster():
     jobs = [
         {
-            "name": "gpt2-shuffle-lr6e-4_params45.2M_tokens899.7M_init44_data42-kinovis",
+            "name": "gpt2-shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init44_data42-kinovis",
             "state": "Running",
         },
         {
-            "name": "gpt2-shuffle-lr6e-4_params45.2M_tokens899.7M_init44_data42-kinovis",
+            "name": "gpt2-shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init44_data42-kinovis",
             "state": "Waiting",
         },
         {
-            "name": "gpt2-ascending-lr6e-4_params45.2M_tokens899.7M_init44_data42-kinovis",
+            "name": "gpt2-ascending-lr6e-4-cosine_params45.2M_tokens899.7M_init44_data42-kinovis",
             "state": "Waiting",
         },
         {
-            "name": "gpt2-cooldown-lr6e-4_params45.2M_tokens899.7M_init43_data42-vercors9",
+            "name": "gpt2-cooldown-lr6e-4-cosine_params45.2M_tokens899.7M_init43_data42-vercors9",
             "state": "Running",
         },
         {"name": "gpt2-prep-kinovis", "state": "Error"},
@@ -817,7 +835,7 @@ def test_status_prints_the_chain_count_for_a_cluster(monkeypatch, capsys):
         "oarstat_jobs",
         lambda: [
             {
-                "name": "gpt2-shuffle-lr6e-4_params45.2M_tokens899.7M_init44_data42-kinovis",
+                "name": "gpt2-shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init44_data42-kinovis",
                 "state": "Running",
             }
         ],
@@ -827,3 +845,20 @@ def test_status_prints_the_chain_count_for_a_cluster(monkeypatch, capsys):
     status.main()
 
     assert capsys.readouterr().out == "1\n"
+
+
+def test_the_seeds_runs_are_matched_whatever_their_name_version():
+    from scripts.g5k import dashboard
+
+    assert dashboard.belongs_to_seeds("shuffle-init42-data42", [42], 42)
+    assert dashboard.belongs_to_seeds(
+        "shuffle-lr6e-4_params45.2M_tokens899.7M_init42_data42", [42], 42
+    )
+    assert dashboard.belongs_to_seeds(
+        "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42", [42], 42
+    )
+    assert not dashboard.belongs_to_seeds("shuffle-init43-data42", [42], 42)
+    assert not dashboard.belongs_to_seeds("shuffle-init42-data7", [42], 42)
+    assert not dashboard.belongs_to_seeds(
+        "shuffle-lr6e-4-cosine_params45.2M_tokens899.7M_init42_data7", [42], 42
+    )

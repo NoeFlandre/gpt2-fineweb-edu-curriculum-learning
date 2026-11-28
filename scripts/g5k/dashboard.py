@@ -6,7 +6,7 @@ dashboard:
 
 - the runs already in the bucket are read from its files (runs.json, configs and metrics parquet);
 - the runs of the given seeds are read from their metrics files on this site, and replace any run
-  of the same name;
+  of those seeds, whatever their name, so no run is left under an old name;
 - the bucket files are backed up under backups/<UTC time>/ first, unless --no-backup;
 - every run is logged into a fresh Trackio database (TRACKIO_DIR must point at an empty folder), and
   that database is synced once, so the bucket ends up with all the runs.
@@ -23,6 +23,7 @@ import io
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,7 +38,7 @@ from pathlib import Path
 import pyarrow.parquet as pq
 from gpt2_scratch.experiment.naming import DATA_SEED, run_id
 from gpt2_scratch.model.config import STUDY_CONFIG
-from gpt2_scratch.training.config import TrainConfig
+from gpt2_scratch.training.config import SCHEDULES, TrainConfig
 from gpt2_scratch.training.metrics import read_records
 from gpt2_scratch.training.tracking import (
     PUBLISH_EVERY,
@@ -87,6 +88,15 @@ def _metrics_of(row: dict) -> dict:
     return values
 
 
+_INIT_AND_DATA = re.compile(r"[-_]init(\d+)[-_]data(\d+)$")
+
+
+def belongs_to_seeds(name: str, seeds: list[int], data_seed: int) -> bool:
+    """Whether a run name, in any naming version, is one of the runs of these seeds."""
+    match = _INIT_AND_DATA.search(name)
+    return bool(match) and int(match[1]) in seeds and int(match[2]) == data_seed
+
+
 def bucket_runs(runs_json: list[dict], configs: list[dict], metrics: list[dict]) -> list[Run]:
     """The runs of the dashboard as the bucket files describe them."""
     configs_by_name = {row["run_name"]: row for row in configs}
@@ -122,19 +132,20 @@ def _seed_records(metrics_file: Path) -> list[tuple[int, dict]]:
 
 
 def site_runs(root: Path, seed: int, data_seed: int = DATA_SEED) -> list[Run]:
-    """The runs of one init seed and data seed, read from the metrics under root/<run id>/<arm>/."""
+    """The runs of one init seed and data seed, for every schedule: root/<run id>/<arm>/."""
     runs = []
-    for folder in sorted((root / run_id(seed, data_seed)).glob("*")):
-        metrics_file = folder / "metrics.jsonl"
-        if not metrics_file.exists():
-            continue
-        config = {
-            "arm": folder.name,
-            "train": asdict(TrainConfig(seed=seed)),
-            "model": asdict(STUDY_CONFIG),
-        }
-        name = f"{folder.name}-{run_id(seed, data_seed)}"
-        runs.append(Run(name, config, _seed_records(metrics_file)))
+    for schedule in SCHEDULES:
+        run = run_id(seed, data_seed, schedule)
+        for folder in sorted((root / run).glob("*")):
+            metrics_file = folder / "metrics.jsonl"
+            if not metrics_file.exists():
+                continue
+            config = {
+                "arm": folder.name,
+                "train": asdict(TrainConfig(seed=seed, schedule=schedule)),
+                "model": asdict(STUDY_CONFIG),
+            }
+            runs.append(Run(f"{folder.name}-{run}", config, _seed_records(metrics_file)))
     return runs
 
 
@@ -268,6 +279,9 @@ def main() -> None:
         )
         from_sites = [
             run for seed in args.seeds for run in site_runs(args.runs, seed, args.data_seed)
+        ]
+        current = [
+            run for run in current if not belongs_to_seeds(run.name, args.seeds, args.data_seed)
         ]
         runs = merged(current, from_sites)
         write_dashboard(runs, args.project, args.space, args.bucket)

@@ -29,19 +29,19 @@ leaves out the validation documents. `--data-seed` (default 42) sets the pool an
 ## Train one arm
 
 ```bash
-uv run python -m scripts.train --arm cooldown --seed 42 --data-seed 42 --out runs/lr6e-4_params45.2M_tokens899.7M_init42_data42/cooldown
+uv run python -m scripts.train --arm cooldown --seed 42 --data-seed 42 --out runs/lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42/cooldown
 ```
 
-`--seed` sets the model initialization. Its run is named by `run_id`, such as `lr6e-4_params45.2M_tokens899.7M_init42_data42`.
+`--seed` sets the model initialization. Its run is named by `run_id`, such as `lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42`.
 
-Writes `metrics.jsonl`, `model.pt` and `config.json` into `runs/lr6e-4_params45.2M_tokens899.7M_init42_data42/cooldown`. Each checkpoint is uploaded
+Writes `metrics.jsonl`, `model.pt` and `config.json` into `runs/lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42/cooldown`. Each checkpoint is uploaded
 to the model repository and its local copy deleted; pass `--no-hub` to keep checkpoints local
 instead.
 
 ## Plot and upload
 
 ```bash
-uv run python -m scripts.report --runs runs/lr6e-4_params45.2M_tokens899.7M_init42_data42 --out runs/lr6e-4_params45.2M_tokens899.7M_init42_data42/figures
+uv run python -m scripts.report --runs runs/lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42 --out runs/lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42/figures
 uv run python -m scripts.upload --runs runs
 ```
 

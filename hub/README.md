@@ -24,7 +24,7 @@ order in which documents are seen, which is set by each document's educational s
 trained with six seeds, 42 to 47.
 
 > **Status:** training complete. All 24 runs (4 orders x 6 seeds) are in this repository, in
-> `runs/lr6e-4_params45.2M_tokens899.7M_init<N>_data42/<order>/`. Earlier results were withdrawn: 16 validation documents had leaked
+> `runs/lr6e-4-cosine_params45.2M_tokens899.7M_init<N>_data42/<order>/`. Earlier results were withdrawn: 16 validation documents had leaked
 > into the seed-42 training pool, so all 24 runs were retrained on the corrected setup.
 
 | Run | Order |
@@ -113,7 +113,7 @@ Every 50 steps, and after the last step:
 
 ## Files
 
-Each run has a folder `runs/lr6e-4_params45.2M_tokens899.7M_init<N>_data<D>/<order>/`, named by its peak learning rate (6e-4), parameter count (45.2M), tokens trained (899.7M), initialization seed `<N>` and data seed `<D>`. `<N>` is the initialization seed (42 to 47), `<D>` is
+Each run has a folder `runs/lr6e-4-cosine_params45.2M_tokens899.7M_init<N>_data<D>/<order>/`, named by its learning-rate schedule (`cosine`: decay to 6e-5), peak learning rate (6e-4), parameter count (45.2M), tokens trained (899.7M), initialization seed `<N>` and data seed `<D>`. `<N>` is the initialization seed (42 to 47), `<D>` is
 the data seed (42 for all runs so far), and `<order>` is the document order. Each folder holds:
 
 - `model.pt`: final weights (`state_dict`).
@@ -136,7 +136,7 @@ from gpt2_scratch.model.gpt2 import GPT2
 
 path = hf_hub_download(
     "NoeFlandre/gpt2-fineweb-edu-curriculum-learning",
-    "runs/lr6e-4_params45.2M_tokens899.7M_init42_data42/shuffle/model.pt",
+    "runs/lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42/shuffle/model.pt",
 )
 model = GPT2(STUDY_CONFIG)
 model.load_state_dict(torch.load(path, map_location="cpu"))

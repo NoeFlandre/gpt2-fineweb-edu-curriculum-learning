@@ -2,7 +2,7 @@
 # Start the training chains of one or two arms, for one seed, on one cluster of this site. Run on the
 # frontend, from the repository root, after transfer.sh pushed the code.
 #
-# Usage: SEED=43 [DATA_SEED=42] bash scripts/g5k/launch.sh CLUSTER ARM [ARM]
+# Usage: SEED=43 [DATA_SEED=42] [SCHEDULE=constant] bash scripts/g5k/launch.sh CLUSTER ARM [ARM]
 #
 # If the site's environment and that seed's data do not match this code, first queue a CPU job that
 # rebuilds them. Then queue one training chain per arm on the cluster; each chain starts after that job.
@@ -14,7 +14,9 @@ seed=${SEED:?set SEED, for example SEED=43}
 [[ "$seed" =~ ^[0-9]+$ ]] || { echo "SEED must be a number" >&2; exit 2; }
 data_seed=${DATA_SEED:-42}
 [[ "$data_seed" =~ ^[0-9]+$ ]] || { echo "DATA_SEED must be a number" >&2; exit 2; }
-rid=$(run_id "$seed" "$data_seed")
+schedule=${SCHEDULE:-cosine}  # cosine decays to 6e-5; constant holds 6e-4 after warmup
+[[ "$schedule" = cosine || "$schedule" = constant ]] || { echo "SCHEDULE must be cosine or constant" >&2; exit 2; }
+rid=$(run_id "$seed" "$data_seed" "$schedule")
 WALLTIME=${WALLTIME:-24:00}
 QUEUE=${QUEUE:-abaca}  # abaca, or besteffort where this account has no production access
 [[ "$QUEUE" = abaca || "$QUEUE" = besteffort ]] || { echo "QUEUE must be abaca or besteffort" >&2; exit 2; }
@@ -77,6 +79,6 @@ for arm in "${arms[@]}"; do
     dependency=(-a "$prep")
   fi
   head=$(submit_job "gpt2-$arm-$rid-$cluster" "$QUEUE" "cluster='$cluster'" "gpu=1,walltime=$WALLTIME" \
-    "bash scripts/g5k/train_arm.sh $arm $cluster $WALLTIME $seed $data_seed $QUEUE" ${dependency[@]+"${dependency[@]}"})
+    "bash scripts/g5k/train_arm.sh $arm $cluster $WALLTIME $seed $data_seed $QUEUE $schedule" ${dependency[@]+"${dependency[@]}"})
   echo "$arm seed $seed on $cluster: job $head"
 done

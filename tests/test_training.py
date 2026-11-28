@@ -1,6 +1,7 @@
 import json
 import math
 from dataclasses import replace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -33,7 +34,7 @@ def make_data_root(root, arm="shuffle"):
 
 
 def small_cfg(**overrides):
-    settings = {
+    settings: dict[str, Any] = {
         "total_tokens": 4 * 64,
         "total_batch_size": 64,
         "micro_batch_size": 2,
@@ -332,3 +333,16 @@ def test_benchmark_accuracy_is_a_curve_with_a_point_at_every_evaluation(tmp_path
     )
 
     assert [r["step"] for r in read_records(out) if "piqa_acc" in r] == [0, 2, 4]
+
+
+def test_constant_schedule_holds_the_peak_after_warmup():
+    cfg = TrainConfig(schedule="constant")
+
+    assert get_lr(cfg.warmup_steps - 1, cfg) == pytest.approx(cfg.max_lr)
+    assert get_lr(cfg.warmup_steps + 500, cfg) == pytest.approx(cfg.max_lr)
+    assert get_lr(cfg.max_steps, cfg) == pytest.approx(cfg.max_lr)
+
+
+def test_schedule_must_be_cosine_or_constant():
+    with pytest.raises(ValueError, match="schedule must be cosine or constant"):
+        TrainConfig(schedule="linear")

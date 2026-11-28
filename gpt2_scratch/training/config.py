@@ -4,6 +4,9 @@ from dataclasses import dataclass
 
 BATCH_SPLIT_MESSAGE = "total_batch_size must be divisible by micro_batch_size * sequence_length"
 
+SCHEDULES = ("cosine", "constant")  # cosine decay to min_lr, or constant at max_lr after warmup
+SCHEDULE_MESSAGE = "schedule must be cosine or constant"
+
 
 @dataclass(frozen=True)
 class TrainConfig:
@@ -26,11 +29,14 @@ class TrainConfig:
     checkpoint_every: int = 100
     seed: int = 42
     use_compile: bool = True
+    schedule: str = "cosine"
 
     def __post_init__(self) -> None:
         """Check that the batch splits into whole micro-batches."""
         if self.total_batch_size % (self.micro_batch_size * self.sequence_length) != 0:
             raise ValueError(BATCH_SPLIT_MESSAGE)
+        if self.schedule not in SCHEDULES:
+            raise ValueError(SCHEDULE_MESSAGE)
 
     @property
     def max_steps(self) -> int:

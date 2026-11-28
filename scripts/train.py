@@ -1,7 +1,7 @@
 """Train one ordering arm, tracking curves in Trackio and keeping its checkpoints on the Hub.
 
 Example: python -m scripts.train --arm cooldown --seed 42 \
-    --out runs/lr6e-4_params45.2M_tokens899.7M_init42_data42/cooldown
+    --out runs/lr6e-4-cosine_params45.2M_tokens899.7M_init42_data42/cooldown
 
 If the output folder has no checkpoint, the one published for this arm is downloaded first, so an
 interrupted run resumes from the Hub. Pass --no-hub to keep everything local.
@@ -18,7 +18,7 @@ from gpt2_scratch.experiment.arms import ORDERINGS
 from gpt2_scratch.experiment.naming import DATA_SEED, run_id
 from gpt2_scratch.model.config import STUDY_CONFIG
 from gpt2_scratch.publishing import MODEL_REPO, fetch_checkpoint, publish_checkpoint
-from gpt2_scratch.training.config import TrainConfig
+from gpt2_scratch.training.config import SCHEDULES, TrainConfig
 from gpt2_scratch.training.runner import train
 from gpt2_scratch.training.tracking import (
     TRACKIO_BUCKET,
@@ -67,6 +67,9 @@ def parse_args() -> argparse.Namespace:
         default=DATA_SEED,
         help="seed of the data: the pool, the orders and the validation split",
     )
+    parser.add_argument(
+        "--schedule", choices=SCHEDULES, default=defaults.schedule, help="learning-rate schedule"
+    )
     parser.add_argument("--total-tokens", type=int, default=defaults.total_tokens, help=SMOKE)
     parser.add_argument("--eval-every", type=int, default=defaults.eval_every, help=SMOKE)
     parser.add_argument(
@@ -109,17 +112,18 @@ def main() -> None:
         eval_every=args.eval_every,
         checkpoint_every=args.checkpoint_every,
         seed=args.seed,
+        schedule=args.schedule,
     )
     model_config = STUDY_CONFIG
     data = args.data or Path(f"data/data{args.data_seed}")
-    run = f"{run_id(args.seed, args.data_seed)}/{args.arm}"
+    run = f"{run_id(args.seed, args.data_seed, args.schedule)}/{args.arm}"
     if not args.no_hub:
         _prepare_hub(args.repo, run, args.out)
     tracker = None
     if args.dashboard == "trackio":
         tracker = TrackioTracker.start(
             project=args.project,
-            name=f"{args.arm}-{run_id(args.seed, args.data_seed)}",
+            name=f"{args.arm}-{run_id(args.seed, args.data_seed, args.schedule)}",
             config={"arm": args.arm, "train": asdict(cfg), "model": asdict(model_config)},
             space_id=args.space,
             bucket_id=args.bucket,
